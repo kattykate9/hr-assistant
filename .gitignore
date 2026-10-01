@@ -1,0 +1,51 @@
+.env
+.env.*
+.venv/
+.venv-homebrew-backup/
+__pycache__/
+*.pyc
+*.db
+*.db-*
+*.backup
+# Секреты и локальные настройки
+.env
+.env.*
+*.pem
+*.key
+
+# Базы данных и журналы
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.log
+logs/
+
+# Резервные копии
+*.backup
+*.backup.*
+*.bak
+backups/
+
+# Python
+.venv/
+.venv-*/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Next.js и Node
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+
+# Загруженные файлы кандидатов
+uploads/
+resumes/
+
+# macOS
+.DS_Store
