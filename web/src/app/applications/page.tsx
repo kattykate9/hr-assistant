@@ -11,13 +11,24 @@ type Data = {
 type Vacancy = { id: number; title: string };
 type Params = Record<string, string | string[] | undefined>;
 const knownSources: Record<string, string> = { hh: "hh.ru", telegram: "Telegram", linkedin: "LinkedIn", djinni: "Djinni", website: "Сайт", manual: "Вручную" };
+const stages: Record<string, string> = { new: "Новый", screening: "Скрининг", interview: "Интервью", test: "Тестовое", offer: "Оффер", hired: "Нанят", rejected: "Отказ" };
+const stageColors: Record<string, { backgroundColor: string; color: string }> = {
+  new: { backgroundColor: "#f1f5f9", color: "#0f172a" },
+  screening: { backgroundColor: "#e8f4fc", color: "#075985" },
+  interview: { backgroundColor: "#f0eafa", color: "#6b21a8" },
+  test: { backgroundColor: "#fff8d9", color: "#854d0e" },
+  offer: { backgroundColor: "#fff0e3", color: "#9a3412" },
+  hired: { backgroundColor: "#e8f5ec", color: "#166534" },
+  rejected: { backgroundColor: "#fcebec", color: "#991b1b" },
+};
+const stageStyle = (status: string) => ({ ...stageColors[status] ?? stageColors.new, display: "inline-block", borderRadius: "999px", padding: "5px 12px", fontSize: "12px", fontWeight: 500, lineHeight: "20px" });
 const field = "mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm";
 
 export default async function ApplicationsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const get = (name: string) => { const value = params[name]; return (Array.isArray(value) ? value[0] : value) ?? ""; };
   const filters = new URLSearchParams();
-  for (const key of ["source", "vacancy_id", "created_from", "created_before", "page"]) if (get(key)) filters.set(key, get(key));
+  for (const key of ["source", "status", "vacancy_id", "created_from", "created_before", "page"]) if (get(key)) filters.set(key, get(key));
   let data: Data | null = null;
   let vacancies: Vacancy[] = [];
   let vacanciesError = false;
@@ -55,7 +66,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
         <form key={filters.toString()} method="get" action="/applications" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
           {get("created_from") && <input type="hidden" name="created_from" value={get("created_from")} />}
           {get("created_before") && <input type="hidden" name="created_before" value={get("created_before")} />}
-          <div className="grid items-end gap-4 sm:grid-cols-[1fr_1fr_auto]">
+          <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
             <label className="text-sm font-medium">Источник
               <select name="source" defaultValue={get("source")} className={field}>
                 <option value="">Все источники</option>
@@ -68,6 +79,12 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
                 <option value="">Все вакансии</option>
                 {vacancies.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
                 {get("vacancy_id") && !vacancies.some((item) => String(item.id) === get("vacancy_id")) && <option value={get("vacancy_id")}>{data?.vacancy?.title ?? "Выбранная вакансия"}</option>}
+              </select>
+            </label>
+            <label className="text-sm font-medium">Этап
+              <select name="status" defaultValue={get("status")} className={field}>
+                <option value="">Все этапы</option>
+                {Object.entries(stages).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
             <button type="submit" className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white">Показать</button>
@@ -87,16 +104,11 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
         {error ? <p role="alert" className="rounded-xl bg-amber-50 p-5 text-sm text-amber-900">{error}</p> : data && <>
           <p className="text-sm text-slate-500">Найдено: <strong className="text-slate-900">{data.total}</strong>{get("source") ? ` · ${sourceLabel(get("source"))}` : ""}</p>
           {data.items.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center"><h2 className="font-semibold">Откликов по выбранным условиям пока нет</h2><p className="mt-2 text-sm text-slate-500">Выберите другой источник или сбросьте фильтры.</p></div> : <div className="space-y-3">
-            {data.items.map((application) => <details key={application.id} className="rounded-2xl border border-slate-200 bg-white">
-              <summary className="cursor-pointer px-5 py-4 focus-visible:outline-2 focus-visible:outline-indigo-600">
-                <span className="font-semibold">{application.name}</span>
-                <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 pl-4 text-xs text-slate-500"><span>{application.vacancy_title ?? "Вакансия недоступна"}</span><span>{sourceLabel(application.source)}</span><span className="text-indigo-600">{application.status === "new" ? "Новый" : application.status}</span><span>{dateLabel(application.created_at)}</span></span>
-              </summary>
-              <div className="border-t border-slate-100 px-5 py-5"><p className="break-words text-sm"><strong>Контакт: </strong>{application.contact}</p>
-                <h2 className="mt-5 text-sm font-semibold">Резюме</h2><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-slate-600">{application.resume_text}</p>
-                <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">AI-оценка кандидата ещё не подключена.</p>
-              </div>
-            </details>)}
+            {data.items.map((application) => <a key={application.id} href={`/applications/${application.id}?back=${encodeURIComponent(`/applications?${filters}`)}`} className="block rounded-2xl border border-slate-200 bg-white px-5 py-4 transition hover:border-indigo-300 hover:bg-indigo-50/30 focus-visible:outline-2 focus-visible:outline-indigo-600">
+              <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-semibold text-indigo-700">{application.name}</span><span style={stageStyle(application.status)}>{stages[application.status] ?? application.status}</span></div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{application.vacancy_title ?? "Вакансия недоступна"}</span><span>{sourceLabel(application.source)}</span><span>{dateLabel(application.created_at)}</span></div>
+              <p className="mt-3 text-xs text-slate-500">Открыть карточку →</p>
+            </a>)}
           </div>}
           {data.pages > 1 && <nav aria-label="Страницы откликов" className="flex items-center justify-between gap-4 text-sm">
             {data.page > 1 ? <a href={url({ page: String(data.page-1) })} className="rounded-xl border border-slate-200 bg-white px-4 py-2">← Назад</a> : <span />}

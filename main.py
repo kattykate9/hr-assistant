@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 
+from candidate_workflow import ApplicationStatus, init_candidate_workflow, install_candidate_workflow
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -62,6 +64,7 @@ def init_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    init_candidate_workflow(connect_db)
     yield
 
 
@@ -121,7 +124,8 @@ class ApplicationCreate(BaseModel):
 
 class Application(ApplicationCreate):
     id: int
-    status: Literal["new"]
+    status: ApplicationStatus
+    review_version: int = 1
     created_at: datetime
 
 
@@ -269,3 +273,6 @@ install_company_settings(app, connect_db)
 from recruitment_views import install_recruitment_views
 
 install_recruitment_views(app, connect_db)
+
+
+install_candidate_workflow(app, connect_db)

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import AwareDatetime
+from candidate_workflow import ApplicationStatus
 
 SOURCE_LABELS = {
     "hh": "hh.ru", "telegram": "Telegram", "linkedin": "LinkedIn",
@@ -120,6 +121,7 @@ def install_recruitment_views(app, connect_db):
 
     @router.get("/applications")
     def applications(
+        status: ApplicationStatus | None = None,
         vacancy_id: Annotated[int | None, Query(gt=0)] = None,
         source: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
         created_from: AwareDatetime | None = None,
@@ -130,6 +132,8 @@ def install_recruitment_views(app, connect_db):
         if created_from and created_before and created_from > created_before:
             raise HTTPException(422, "Начало периода должно быть не позже окончания.")
         clauses, params = [], []
+        if status:
+            clauses.append("a.status = ?"); params.append(status)
         if vacancy_id is not None:
             clauses.append("a.vacancy_id = ?"); params.append(vacancy_id)
         if created_from:
