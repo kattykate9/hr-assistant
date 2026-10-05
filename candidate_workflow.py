@@ -1,5 +1,6 @@
 """Local recruiter workflow; decisions are made by the recruiter."""
 from candidate_assessments import init_assessments, read_assessment, install_assessments
+from candidate_tasks import init_tasks, read_task, install_tasks
 from contextlib import closing
 from datetime import datetime, timezone
 from typing import Annotated, Literal
@@ -44,6 +45,7 @@ def init_candidate_workflow(connect_db):
         c.execute('CREATE INDEX IF NOT EXISTS applications_stage ON applications(status)')
 
     init_assessments(connect_db)
+    init_tasks(connect_db)
 
 
 def stage_history(c, application):
@@ -69,7 +71,7 @@ def read_card(c, application_id):
     events = c.execute('SELECT * FROM application_events WHERE application_id=? ORDER BY id DESC LIMIT 100', (application_id,)).fetchall()
     total = c.execute('SELECT COUNT(*) FROM application_events WHERE application_id=?', (application_id,)).fetchone()[0]
     return {'application': dict(row), 'events': [dict(e) for e in events],
-            'assessment': read_assessment(c, application_id), 'events_total': total, 'stage_history': stage_history(c, row), 'timezone': settings(c)['report_timezone'], 'stages': STAGES}
+            'next_action': read_task(c, application_id), 'assessment': read_assessment(c, application_id), 'events_total': total, 'stage_history': stage_history(c, row), 'timezone': settings(c)['report_timezone'], 'stages': STAGES}
 
 
 def require_action(value):
@@ -126,3 +128,4 @@ def install_candidate_workflow(app, connect_db):
 
     app.include_router(router)
     install_assessments(app, connect_db)
+    install_tasks(app, connect_db)

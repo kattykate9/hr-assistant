@@ -84,6 +84,13 @@ def report_text(report, base):
         lines.append(f'• Другие: {other}')
     if not report['received']:
         lines.append('За этот период новых откликов нет.')
+    tasks = report.get('tasks')
+    if tasks:
+        as_of = datetime.fromisoformat(tasks['generated_at']).astimezone(ZoneInfo(tasks['timezone']))
+        lines += ['', f"Действия на {as_of:%d.%m.%Y %H:%M} ({tasks['timezone']}), без hh.ru:",
+                  f"Просроченные: {tasks['overdue_count']}", f"Сегодня, ещё предстоит: {tasks['today_count']}",
+                  f"Всего открытых: {tasks['open_count']}",
+                  'Задачи в защищённом кабинете (включая hh, если они есть):', base + '/#tasks']
     # Link comes from our aggregate endpoint, never from candidate input.
     path = report['applications_url']
     if not path.startswith('/applications?') or '\n' in path or '\r' in path:

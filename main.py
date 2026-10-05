@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 
+from vacancy_archive import init_vacancy_archive, install_vacancy_archive
 from candidate_workflow import ApplicationStatus, init_candidate_workflow, install_candidate_workflow
 
 from fastapi import FastAPI, HTTPException
@@ -64,6 +65,7 @@ def init_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    init_vacancy_archive(connect_db)
     init_candidate_workflow(connect_db)
     yield
 
@@ -93,6 +95,9 @@ class VacancyCreate(BaseModel):
 
 
 class Vacancy(VacancyCreate):
+    vacancy_status: Literal["active", "archived"] = "active"
+    archived_at: datetime | None = None
+    archive_version: int = 1
     language: Literal["ru", "en", "uk"] | None = None
     source_jd_id: int | None = None
     source_jd_version: int | None = None
@@ -180,10 +185,11 @@ def create_vacancy(vacancy: VacancyCreate):
 
 # Посмотреть вакансии
 @app.get("/vacancies", response_model=list[Vacancy])
-def list_vacancies():
+def list_vacancies(include_archived: bool = False):
     with closing(connect_db()) as connection:
         rows = connection.execute(
-            "SELECT * FROM vacancies ORDER BY id DESC"
+            "SELECT * FROM vacancies WHERE (? OR vacancy_status='active') ORDER BY id DESC",
+            (include_archived,)
         ).fetchall()
 
     return [vacancy_from_row(row) for row in rows]
@@ -194,9 +200,10 @@ def list_vacancies():
 def create_application(application: ApplicationCreate):
     created_at = datetime.now(timezone.utc).isoformat()
 
-    with closing(connect_db()) as connection:
+    with closing(connect_db()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
         vacancy = connection.execute(
-            "SELECT id FROM vacancies WHERE id = ?",
+            "SELECT id, vacancy_status FROM vacancies WHERE id = ?",
             (application.vacancy_id,),
         ).fetchone()
 
@@ -206,26 +213,28 @@ def create_application(application: ApplicationCreate):
                 detail="Вакансия не найдена",
             )
 
-        with connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO applications (
-                    vacancy_id, name, contact, source,
-                    resume_text, status, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    application.vacancy_id,
-                    application.name,
-                    application.contact,
-                    application.source,
-                    application.resume_text,
-                    "new",
-                    created_at,
-                ),
+        if vacancy["vacancy_status"] != "active":
+            raise HTTPException(status_code=409, detail="Вакансия закрыта. Выберите другую вакансию.")
+
+        cursor = connection.execute(
+            """
+            INSERT INTO applications (
+                vacancy_id, name, contact, source,
+                resume_text, status, created_at
             )
-            application_id = cursor.lastrowid
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                application.vacancy_id,
+                application.name,
+                application.contact,
+                application.source,
+                application.resume_text,
+                "new",
+                created_at,
+            ),
+        )
+        application_id = cursor.lastrowid
 
     return {
         **application.model_dump(),
@@ -276,3 +285,6 @@ install_recruitment_views(app, connect_db)
 
 
 install_candidate_workflow(app, connect_db)
+
+
+install_vacancy_archive(app, connect_db)

@@ -280,7 +280,7 @@ async def start(message: Message, state: FSMContext):
             response = await client.get(f"{API_URL}/vacancies")
             response.raise_for_status()
             vacancies = sorted(
-                response.json(),
+                [vacancy for vacancy in response.json() if vacancy.get("vacancy_status", "active") == "active"],
                 key=lambda vacancy: int(vacancy["id"]),
             )
     except (httpx.HTTPError, ValueError):
@@ -419,6 +419,14 @@ async def receive_resume(message: Message, state: FSMContext):
         await message.answer(
             "Не удалось подтвердить сохранение отклика. "
             "Попросите HR проверить его наличие перед повторной отправкой."
+        )
+        return
+
+    if response.status_code == 409:
+        await state.clear()
+        await message.answer(
+            "Эта вакансия закрылась во время заполнения анкеты. "
+            "Отклик не сохранён. Выберите другую вакансию через /start."
         )
         return
 

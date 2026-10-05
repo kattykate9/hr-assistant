@@ -1,3 +1,4 @@
+import TaskDashboard from "./task-dashboard";
 import { headers } from "next/headers";
 import ReportPanel, { type RecruitmentReport } from "./report-panel";
 import VacancyList, { type Vacancy } from "./vacancy-list";
@@ -19,7 +20,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   const params = await searchParams;
   const mode = params.report === "current" ? "current" : "latest";
   const [vacancies, report] = await Promise.all([
-    load<Vacancy[]>("/vacancies"), load<RecruitmentReport>(`/recruiting/report?mode=${mode}`),
+    load<Vacancy[]>("/vacancies?include_archived=true"), load<RecruitmentReport>(`/recruiting/report?mode=${mode}`),
   ]);
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
@@ -46,6 +47,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
             <a href="#integrations" className="hover:text-indigo-600">
               Интеграции
             </a>
+            <a href="/planning" className="hover:text-indigo-600">Планирование</a>
             <a href="/settings" className="hover:text-indigo-600">Настройки</a>
           </nav>
 
@@ -57,9 +59,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
       <main className="mx-auto max-w-7xl space-y-10 px-6 py-10">
         <ReportPanel report={report} mode={mode} />
+        <TaskDashboard />
         <section id="vacancies" className="scroll-mt-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <div><h2 className="text-xl font-semibold">Вакансии</h2><p className="mt-1 text-sm text-slate-500">Название раскрывает описание. Ссылка «Отклики» открывает кандидатов на эту вакансию.</p></div>
+            <div><h2 className="text-xl font-semibold">Вакансии</h2><p className="mt-1 text-sm text-slate-500">Активные вакансии доступны в боте. Закрытые хранятся в архиве вместе с откликами.</p></div>
             <a href="/applications" className="text-sm font-medium text-indigo-600 hover:underline">Все отклики →</a>
           </div>
           {!Array.isArray(vacancies) ? <p role="alert" className="mt-5 text-sm text-amber-800">Не удалось загрузить вакансии. Обновите страницу.</p>

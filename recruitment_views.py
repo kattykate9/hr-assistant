@@ -1,3 +1,4 @@
+from candidate_tasks import list_task_items, task_overview
 """Shared report data and paginated applications for the local HR workspace.
 No messages are sent. Reporting uses the configured local schedule and UTC queries.
 """
@@ -113,11 +114,13 @@ def install_recruitment_views(app, connect_db):
         with closing(connect_db()) as connection:
             connection.execute("BEGIN")
             data = build_report(connection, settings(connection), exclude_hh=True)
+            tasks = task_overview(connection, exclude_hh=True, include_items=False)
         # Only aggregate fields; no resume, contacts, vacancy IDs or hh totals.
         fields = ("mode", "kind", "timezone", "period_start", "period_end", "next_report_at",
                   "received", "new_in_period", "ai_processed", "ai_assessment", "ai_status", "applications_url")
         result = {key: data[key] for key in fields}
         result["sources"] = [row for row in data["sources"] if row["source"] != "hh"]
+        result["tasks"] = tasks
         result["scope"] = "without_hh"
         return result
 
@@ -193,8 +196,9 @@ def install_recruitment_views(app, connect_db):
             ).fetchall()
             config = settings(connection)
             matches = application_matches(connection, rows)
+            tasks = list_task_items(connection, rows)
         return {
-            "items": [{**dict(row), "match": matches[row["id"]]} for row in rows], "total": total, "page": page,
+            "items": [{**dict(row), "match": matches[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
             "page_size": page_size, "pages": pages, "vacancy": vacancy,
             "sources": source_rows(counts), "timezone": config["report_timezone"],
             "query": q.strip(), "assessment": assessment, "sort": sort,

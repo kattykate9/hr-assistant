@@ -1,15 +1,16 @@
+import type { CandidateTask } from "./[id]/task-types";
 import MatchBadge, { type MatchSummary } from "./match-badge";
 import { headers } from "next/headers";
 import { reportDate } from "../report-panel";
 export const dynamic = "force-dynamic";
-type Applicant = { match: MatchSummary; id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string };
+type Applicant = { next_action: CandidateTask | null; match: MatchSummary; id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string };
 type Data = {
   items: Applicant[]; total: number; page: number; pages: number; timezone: string;
   vacancy: { id: number; title: string } | null;
   sources: { source: string; label: string; count: number }[];
   created_from: string | null; created_before: string | null;
 };
-type Vacancy = { id: number; title: string };
+type Vacancy = { id: number; title: string; vacancy_status?: "active" | "archived" };
 type Params = Record<string, string | string[] | undefined>;
 const knownSources: Record<string, string> = { hh: "hh.ru", telegram: "Telegram", linkedin: "LinkedIn", djinni: "Djinni", website: "Сайт", manual: "Вручную" };
 const stages: Record<string, string> = { new: "Новый", screening: "Скрининг", interview: "Интервью", test: "Тестовое", offer: "Оффер", hired: "Нанят", rejected: "Отказ" };
@@ -37,7 +38,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   const requestHeaders = { Authorization: (await headers()).get("authorization") ?? "" };
   const results = await Promise.allSettled([
     fetch(`http://127.0.0.1:8000/recruiting/applications?${filters}`, { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
-    fetch("http://127.0.0.1:8000/vacancies", { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
+    fetch("http://127.0.0.1:8000/vacancies?include_archived=true", { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
   ]);
   if (results[0].status === "fulfilled") {
     const response = results[0].value;
@@ -95,7 +96,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
             <label className="text-sm font-medium">Вакансия
               <select name="vacancy_id" defaultValue={get("vacancy_id")} className={field}>
                 <option value="">Все вакансии</option>
-                {vacancies.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                {vacancies.map((item) => <option key={item.id} value={item.id}>{item.title}{item.vacancy_status === "archived" ? " · Архив" : ""}</option>)}
                 {get("vacancy_id") && !vacancies.some((item) => String(item.id) === get("vacancy_id")) && <option value={get("vacancy_id")}>{data?.vacancy?.title ?? "Выбранная вакансия"}</option>}
               </select>
             </label>
@@ -126,6 +127,9 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
             {data.items.map((application) => <a key={application.id} href={`/applications/${application.id}?back=${encodeURIComponent(`/applications?${filters}`)}`} className="block rounded-2xl border border-slate-200 bg-white px-5 py-4 transition hover:border-indigo-300 hover:bg-indigo-50/30 focus-visible:outline-2 focus-visible:outline-indigo-600">
               <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-semibold text-indigo-700">{application.name}</span><span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}><MatchBadge value={application.match} /><span style={stageStyle(application.status)}>{stages[application.status] ?? application.status}</span></span></div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{application.vacancy_title ?? "Вакансия недоступна"}</span><span>{sourceLabel(application.source)}</span><span>{dateLabel(application.created_at)}</span></div>
+              {application.next_action && <div style={{ marginTop: 12, borderRadius: 10, padding: "10px 12px", backgroundColor: application.next_action.overdue ? "#fcebec" : "#f1f5f9", color: application.next_action.overdue ? "#991b1b" : "#475569", fontSize: 12 }}>
+                <strong>{application.next_action.overdue ? "Просрочено" : "Следующее действие"}:</strong> {application.next_action.title} · {dateLabel(application.next_action.due_at)} ({data.timezone})
+              </div>}
               <p className="mt-3 text-xs text-slate-500">Открыть карточку →</p>
             </a>)}
           </div>}
