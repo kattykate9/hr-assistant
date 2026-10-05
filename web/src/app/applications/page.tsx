@@ -1,7 +1,8 @@
+import MatchBadge, { type MatchSummary } from "./match-badge";
 import { headers } from "next/headers";
 import { reportDate } from "../report-panel";
 export const dynamic = "force-dynamic";
-type Applicant = { id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string };
+type Applicant = { match: MatchSummary; id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string };
 type Data = {
   items: Applicant[]; total: number; page: number; pages: number; timezone: string;
   vacancy: { id: number; title: string } | null;
@@ -28,7 +29,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const get = (name: string) => { const value = params[name]; return (Array.isArray(value) ? value[0] : value) ?? ""; };
   const filters = new URLSearchParams();
-  for (const key of ["source", "status", "vacancy_id", "created_from", "created_before", "page"]) if (get(key)) filters.set(key, get(key));
+  for (const key of ["source", "status", "vacancy_id", "created_from", "created_before", "page", "q", "assessment", "sort"]) if (get(key)) filters.set(key, get(key));
   let data: Data | null = null;
   let vacancies: Vacancy[] = [];
   let vacanciesError = false;
@@ -66,6 +67,23 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
         <form key={filters.toString()} method="get" action="/applications" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
           {get("created_from") && <input type="hidden" name="created_from" value={get("created_from")} />}
           {get("created_before") && <input type="hidden" name="created_before" value={get("created_before")} />}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, alignItems: "end" }}>
+            <label className="text-sm font-medium">Поиск кандидата
+              <input type="search" name="q" maxLength={200} defaultValue={get("q")} placeholder="Имя, контакт или слова из резюме" className={field} />
+            </label>
+            <label className="text-sm font-medium">Ручная оценка
+              <select name="assessment" defaultValue={get("assessment") || "all"} className={field}>
+                <option value="all">Все отклики</option><option value="none">Без оценки</option><option value="assessed">Есть оценка</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium">Сортировка
+              <select name="sort" defaultValue={get("sort") || "date_desc"} className={field}>
+                <option value="date_desc">Сначала новые</option><option value="date_asc">Сначала старые</option>
+                <option value="match_desc">Оценка по критериям вакансии: от большей к меньшей</option><option value="match_asc">Оценка по критериям вакансии: от меньшей к большей</option>
+              </select>
+            </label>
+          </div>
+          <p className="text-xs text-slate-500">Поиск без учёта регистра: должны встретиться все введённые слова. При сортировке по оценке критериев вакансии отклики без оценки идут в конце.</p>
           <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
             <label className="text-sm font-medium">Источник
               <select name="source" defaultValue={get("source")} className={field}>
@@ -89,6 +107,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
             </label>
             <button type="submit" className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white">Показать</button>
           </div>
+          {get("assessment") === "none" && <p className="text-xs text-slate-500">Без оценки: ни одному критерию ещё не назначена оценка. Сохранённый результат 0% считается оценкой.</p>}
           {vacanciesError && <p className="text-xs text-amber-800">Список вакансий недоступен. Текущий фильтр сохранён; попробуйте обновить страницу.</p>}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             {[{ source: "", label: "Все источники" }, { source: "hh", label: "hh.ru" }, { source: "telegram", label: "Telegram" }].map((item) => (
@@ -103,9 +122,9 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
         </form>
         {error ? <p role="alert" className="rounded-xl bg-amber-50 p-5 text-sm text-amber-900">{error}</p> : data && <>
           <p className="text-sm text-slate-500">Найдено: <strong className="text-slate-900">{data.total}</strong>{get("source") ? ` · ${sourceLabel(get("source"))}` : ""}</p>
-          {data.items.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center"><h2 className="font-semibold">Откликов по выбранным условиям пока нет</h2><p className="mt-2 text-sm text-slate-500">Выберите другой источник или сбросьте фильтры.</p></div> : <div className="space-y-3">
+          {data.items.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center"><h2 className="font-semibold">Откликов по выбранным условиям пока нет</h2><p className="mt-2 text-sm text-slate-500">Измените поисковый запрос или фильтры.</p></div> : <div className="space-y-3">
             {data.items.map((application) => <a key={application.id} href={`/applications/${application.id}?back=${encodeURIComponent(`/applications?${filters}`)}`} className="block rounded-2xl border border-slate-200 bg-white px-5 py-4 transition hover:border-indigo-300 hover:bg-indigo-50/30 focus-visible:outline-2 focus-visible:outline-indigo-600">
-              <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-semibold text-indigo-700">{application.name}</span><span style={stageStyle(application.status)}>{stages[application.status] ?? application.status}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-semibold text-indigo-700">{application.name}</span><span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}><MatchBadge value={application.match} /><span style={stageStyle(application.status)}>{stages[application.status] ?? application.status}</span></span></div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{application.vacancy_title ?? "Вакансия недоступна"}</span><span>{sourceLabel(application.source)}</span><span>{dateLabel(application.created_at)}</span></div>
               <p className="mt-3 text-xs text-slate-500">Открыть карточку →</p>
             </a>)}

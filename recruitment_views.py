@@ -1,7 +1,9 @@
 """Shared report data and paginated applications for the local HR workspace.
 No messages are sent. Reporting uses the configured local schedule and UTC queries.
 """
+from candidate_assessments import application_matches, match_summary
 import json
+import unicodedata
 from contextlib import closing
 from datetime import datetime, time, timedelta, timezone
 from typing import Annotated, Literal
@@ -124,6 +126,9 @@ def install_recruitment_views(app, connect_db):
         status: ApplicationStatus | None = None,
         vacancy_id: Annotated[int | None, Query(gt=0)] = None,
         source: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+        q: Annotated[str, Query(max_length=200)] = "",
+        assessment: Literal["all", "none", "assessed"] = "all",
+        sort: Literal["date_desc", "date_asc", "match_desc", "match_asc"] = "date_desc",
         created_from: AwareDatetime | None = None,
         created_before: AwareDatetime | None = None,
         page: Annotated[int, Query(ge=1)] = 1,
@@ -131,6 +136,15 @@ def install_recruitment_views(app, connect_db):
     ):
         if created_from and created_before and created_from > created_before:
             raise HTTPException(422, "Начало периода должно быть не позже окончания.")
+        def fold(value):
+            return unicodedata.normalize("NFKC", value or "").casefold()
+        # Reuse the same scoring formula as the candidate card. No stored score to go stale.
+        def assessment_metric(criteria, answers, metric):
+            if criteria is None or answers is None:
+                return 0
+            return int(match_summary(json.loads(criteria), json.loads(answers), True)[metric])
+        evaluated = "assessment_metric(e.criteria_json, e.answers_json, 'has_assessment')"
+        percent = "assessment_metric(e.criteria_json, e.answers_json, 'percent')"
         clauses, params = [], []
         if status:
             clauses.append("a.status = ?"); params.append(status)
@@ -140,7 +154,22 @@ def install_recruitment_views(app, connect_db):
             clauses.append("julianday(a.created_at) >= julianday(?)"); params.append(created_from.isoformat())
         if created_before:
             clauses.append("julianday(a.created_at) < julianday(?)"); params.append(created_before.isoformat())
+        if assessment != "all":
+            clauses.append(evaluated + (" = 0" if assessment == "none" else " = 1"))
+        # All words must be present; they may be in different fields. Symbols are literal.
+        for word in dict.fromkeys(fold(q).split()):
+            clauses.append("instr(search_fold(COALESCE(a.name,'') || ' ' || COALESCE(a.contact,'') || ' ' || COALESCE(a.resume_text,'')), ?) > 0")
+            params.append(word)
+        joins = "FROM applications a LEFT JOIN vacancies v ON v.id=a.vacancy_id LEFT JOIN candidate_assessments e ON e.application_id=a.id"
+        ordering = {
+            "date_desc": "julianday(a.created_at) DESC, a.id DESC",
+            "date_asc": "julianday(a.created_at) ASC, a.id ASC",
+            "match_desc": evaluated + " DESC, " + percent + " DESC, julianday(a.created_at) DESC, a.id DESC",
+            "match_asc": evaluated + " DESC, " + percent + " ASC, julianday(a.created_at) DESC, a.id DESC",
+        }[sort]
         with closing(connect_db()) as connection:
+            connection.create_function("search_fold", 1, fold, deterministic=True)
+            connection.create_function("assessment_metric", 3, assessment_metric, deterministic=True)
             connection.execute("BEGIN")
             vacancy = None
             if vacancy_id is not None:
@@ -150,24 +179,25 @@ def install_recruitment_views(app, connect_db):
                 vacancy = dict(row)
             base_where = " AND ".join(clauses) or "1=1"
             counts = {row["source"]: row["count"] for row in connection.execute(
-                f"SELECT a.source, COUNT(*) AS count FROM applications a WHERE {base_where} GROUP BY a.source", params
+                f"SELECT a.source, COUNT(*) AS count {joins} WHERE {base_where} GROUP BY a.source", params
             )}
             if source:
                 clauses.append("a.source = ?"); params.append(source)
             where = " AND ".join(clauses) or "1=1"
-            total = connection.execute(f"SELECT COUNT(*) FROM applications a WHERE {where}", params).fetchone()[0]
+            total = connection.execute(f"SELECT COUNT(*) {joins} WHERE {where}", params).fetchone()[0]
             pages = max(1, (total + page_size - 1) // page_size)
-            # Clamp after deletions or manual URL changes; don't show a false empty state.
             page = min(page, pages)
             rows = connection.execute(
-                f"SELECT a.*, v.title AS vacancy_title FROM applications a LEFT JOIN vacancies v ON v.id=a.vacancy_id WHERE {where} ORDER BY julianday(a.created_at) DESC, a.id DESC LIMIT ? OFFSET ?",
+                f"SELECT a.*, v.title AS vacancy_title {joins} WHERE {where} ORDER BY {ordering} LIMIT ? OFFSET ?",
                 [*params, page_size, (page-1)*page_size],
             ).fetchall()
             config = settings(connection)
+            matches = application_matches(connection, rows)
         return {
-            "items": [dict(row) for row in rows], "total": total, "page": page,
+            "items": [{**dict(row), "match": matches[row["id"]]} for row in rows], "total": total, "page": page,
             "page_size": page_size, "pages": pages, "vacancy": vacancy,
             "sources": source_rows(counts), "timezone": config["report_timezone"],
+            "query": q.strip(), "assessment": assessment, "sort": sort,
             "created_from": created_from.isoformat() if created_from else None,
             "created_before": created_before.isoformat() if created_before else None,
         }

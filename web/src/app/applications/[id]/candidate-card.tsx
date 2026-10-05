@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState, type FormEvent } from "react";
+import AssessmentPanel from "./assessment-panel";
 import { saveCandidate } from "./actions";
 import type { ApplicationCard } from "./types";
 const sources: Record<string, string> = { hh: "hh.ru", telegram: "Telegram", linkedin: "LinkedIn", djinni: "Djinni", website: "Сайт", manual: "Вручную" };
@@ -61,6 +62,7 @@ export default function CandidateCard({ initial }: { initial: ApplicationCard })
         <section className={box}><h2 className="text-lg font-semibold">Заметка рекрутера</h2><form onSubmit={(event) => submit(event, "note")} className="mt-4 space-y-3"><textarea aria-label="Заметка рекрутера" value={note} onChange={(event) => { setNote(event.target.value); noteRequest.current = null; }} disabled={busy} required maxLength={5000} rows={5} placeholder="Что обсудили, что уточнить, следующий шаг…" className="w-full rounded-xl border border-slate-300 p-3 text-sm" /><div className="flex items-center justify-between gap-3"><button className={button} disabled={busy || !note.trim()}>Добавить заметку</button><span className="text-xs text-slate-400">{note.length} / 5000</span></div><p className="text-xs text-slate-500">Заметка сохранится к этапу «{stageLabel(a.status)}». Для другого этапа сначала сохраните его.</p></form></section>
       </div>
     </div>
+    <AssessmentPanel id={a.id} initial={initial.assessment} timezone={data.timezone} />
     <section className={box}>
       <h2 className="text-lg font-semibold">История этапов и заметок</h2>
       <p className="mt-2 text-sm text-slate-500">Заметки расположены напротив этапа, на котором они добавлены. Последний этап сверху. Время: {data.timezone}.</p>
