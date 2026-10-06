@@ -1,0 +1,100 @@
+stages:
+  - build_base
+  - build_deploy
+
+variables:
+  HR_CI_REGISTRY_IMAGE: $HR_CI_REGISTRY/$CI_PROJECT_PATH
+
+.kostyl_template:
+  before_script:
+    # Обход задержки запуска Docker daemon у Kubernetes GitLab Runner.
+    - |
+      for i in $(seq 1 30)
+      do
+          docker info && break
+          echo "Waiting for docker to start"
+          sleep 1s
+      done
+
+.vars:
+  variables:
+    APP_TAG: $CI_COMMIT_SHA
+    LATEST_TAG: ${CI_COMMIT_REF_SLUG}-web-latest
+    BASE_TAG: ${CI_COMMIT_REF_SLUG}-web-base
+
+.build_base_template:
+  extends: [.kostyl_template, .vars]
+  stage: build_base
+  interruptible: true
+  script:
+    - echo -n "$HR_CI_REGISTRY_PASSWORD" | docker login -u "$HR_CI_REGISTRY_USER" --password-stdin "$HR_CI_REGISTRY"
+    - >
+      DOCKER_BUILDKIT=1
+      docker build
+      --pull
+      --no-cache
+      --file=./deploy/Dockerfile.web-base
+      --tag "$HR_CI_REGISTRY_IMAGE:$BASE_TAG"
+      .
+    - docker push "$HR_CI_REGISTRY_IMAGE:$BASE_TAG"
+
+.build_deploy_template:
+  extends: [.kostyl_template, .vars]
+  stage: build_deploy
+  interruptible: true
+  variables:
+    STACK_NAME: pocket-${CI_ENVIRONMENT_NAME}
+  script:
+    - echo -n "$HR_CI_REGISTRY_PASSWORD" | docker login -u "$HR_CI_REGISTRY_USER" --password-stdin "$HR_CI_REGISTRY"
+    - >
+      DOCKER_BUILDKIT=1
+      docker build
+      --pull
+      --no-cache
+      --file=./deploy/Dockerfile.web-app
+      --build-arg "BASE_IMAGE=$HR_CI_REGISTRY_IMAGE:$BASE_TAG"
+      --tag "$HR_CI_REGISTRY_IMAGE:$APP_TAG"
+      --tag "$HR_CI_REGISTRY_IMAGE:$LATEST_TAG"
+      .
+    - docker push "$HR_CI_REGISTRY_IMAGE:$APP_TAG"
+    - docker push "$HR_CI_REGISTRY_IMAGE:$LATEST_TAG"
+    # Повторный stack deploy обновляет образ и конфигурацию из DOTENV_FILE.
+    - timeout -v "$DOCKER_DEPLOY_TIMEOUT" docker stack deploy --with-registry-auth --prune -c deploy/docker-stack.yml "$STACK_NAME" --detach=false
+
+build-base-production:
+  extends: [.build_base_template]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+      changes:
+        - deploy/Dockerfile.base
+        - pyproject.toml
+        - uv.lock
+
+build-base-staging:
+  extends: [.build_base_template]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+      changes:
+        - deploy/Dockerfile.base
+        - pyproject.toml
+        - uv.lock
+
+build-deploy-production:
+  extends: [.build_deploy_template]
+  environment:
+    name: production
+    url: https://pocket.baklajan.io
+  variables:
+    PUBLISHED_PORT: "18083"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+
+build-deploy-staging:
+  extends: [.build_deploy_template]
+  environment:
+    name: staging
+    url: https://pocket-staging.baklajan.io
+  variables:
+    PUBLISHED_PORT: "8083"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'

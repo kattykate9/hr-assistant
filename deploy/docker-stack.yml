@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  bot:
+    image: ${PO_CI_REGISTRY_IMAGE}:${APP_TAG}
+    env_file:
+      - ${DOTENV_FILE}
+    command: ["sh", "-c", "alembic upgrade head && exec gpt-pocket-bot"]
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+
+  admin:
+    image: ${PO_CI_REGISTRY_IMAGE}:${APP_TAG}
+    env_file:
+      - ${DOTENV_FILE}
+    environment:
+      ADMIN_HOST: 0.0.0.0
+    command: ["gpt-pocket-admin"]
+    ports:
+      - mode: ingress
+        target: 8080
+        published: ${PUBLISHED_PORT}
+        protocol: tcp
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
