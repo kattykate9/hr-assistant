@@ -51,7 +51,7 @@ variables:
       docker build
       --pull
       --no-cache
-      --file=./deploy/Dockerfile.back-app
+      --file=./deploy/Dockerfile.back
       --build-arg "BASE_IMAGE=$HR_CI_REGISTRY_IMAGE:$BASE_TAG"
       --tag "$HR_CI_REGISTRY_IMAGE:$APP_TAG"
       --tag "$HR_CI_REGISTRY_IMAGE:$LATEST_TAG"
