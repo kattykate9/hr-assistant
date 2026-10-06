@@ -1,3 +1,5 @@
+from candidate_export import ExportRequest, export_csv
+from fastapi import Header
 from candidate_tasks import list_task_items, task_overview
 """Shared report data and paginated applications for the local HR workspace.
 No messages are sent. Reporting uses the configured local schedule and UTC queries.
@@ -137,6 +139,21 @@ def install_recruitment_views(app, connect_db):
         page: Annotated[int, Query(ge=1)] = 1,
         page_size: Annotated[int, Query(ge=1, le=100)] = 30,
     ):
+        return query_applications(status, vacancy_id, source, q, assessment, sort, created_from, created_before, page, page_size)
+
+    def query_applications(
+        status: ApplicationStatus | None = None,
+        vacancy_id: Annotated[int | None, Query(gt=0)] = None,
+        source: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+        q: Annotated[str, Query(max_length=200)] = "",
+        assessment: Literal["all", "none", "assessed"] = "all",
+        sort: Literal["date_desc", "date_asc", "match_desc", "match_asc"] = "date_desc",
+        created_from: AwareDatetime | None = None,
+        created_before: AwareDatetime | None = None,
+        page: Annotated[int, Query(ge=1)] = 1,
+        page_size: Annotated[int, Query(ge=1, le=100)] = 30,
+        export_request=None,
+    ):
         if created_from and created_before and created_from > created_before:
             raise HTTPException(422, "Начало периода должно быть не позже окончания.")
         def fold(value):
@@ -186,8 +203,22 @@ def install_recruitment_views(app, connect_db):
             )}
             if source:
                 clauses.append("a.source = ?"); params.append(source)
+            if export_request is not None:
+                clauses.append("a.source != 'hh'")
+                if export_request.mode == 'selected':
+                    if not export_request.ids:
+                        raise HTTPException(422, 'Выберите хотя бы один отклик')
+                    ids = list(dict.fromkeys(export_request.ids))
+                    clauses.append('a.id IN (' + ','.join('?' for _ in ids) + ')')
+                    params.extend(ids)
             where = " AND ".join(clauses) or "1=1"
             total = connection.execute(f"SELECT COUNT(*) {joins} WHERE {where}", params).fetchone()[0]
+            if export_request is not None:
+                if total == 0: raise HTTPException(422, 'Нет доступных откликов для экспорта. Отклики hh.ru пока исключены.')
+                if total > 2000: raise HTTPException(413, 'Найдено больше 2000 откликов. Сузьте фильтры; частичный файл не создавался.')
+                if export_request.mode == 'selected' and total != len(set(export_request.ids)):
+                    raise HTTPException(409, 'Часть выбранных откликов недоступна или больше не соответствует фильтрам. Обновите страницу.')
+                page, page_size = 1, 2000
             pages = max(1, (total + page_size - 1) // page_size)
             page = min(page, pages)
             rows = connection.execute(
@@ -196,6 +227,8 @@ def install_recruitment_views(app, connect_db):
             ).fetchall()
             config = settings(connection)
             matches = application_matches(connection, rows)
+            if export_request is not None:
+                return export_csv(connection, rows, matches, export_request)
             tasks = list_task_items(connection, rows)
         return {
             "items": [{**dict(row), "match": matches[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
@@ -205,5 +238,10 @@ def install_recruitment_views(app, connect_db):
             "created_from": created_from.isoformat() if created_from else None,
             "created_before": created_before.isoformat() if created_before else None,
         }
+
+    @router.post('/export')
+    def export(data: ExportRequest, x_hr_action: Annotated[str | None, Header()] = None):
+        if x_hr_action != 'candidate-workflow': raise HTTPException(403, 'Используйте экспорт из кабинета')
+        return query_applications(**data.filters.model_dump(), export_request=data)
 
     app.include_router(router)

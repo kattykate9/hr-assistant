@@ -1,3 +1,4 @@
+import ExportPanel, { ExportChoice } from "./export-panel";
 import type { CandidateTask } from "./[id]/task-types";
 import MatchBadge, { type MatchSummary } from "./match-badge";
 import { headers } from "next/headers";
@@ -122,22 +123,24 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
           </div>}
         </form>
         {error ? <p role="alert" className="rounded-xl bg-amber-50 p-5 text-sm text-amber-900">{error}</p> : data && <>
+          <ExportPanel key={filters.toString()} query={filters.toString()} total={data.total} choices={data.items.map(({id, name, source}) => ({id, name, source}))}>
           <p className="text-sm text-slate-500">Найдено: <strong className="text-slate-900">{data.total}</strong>{get("source") ? ` · ${sourceLabel(get("source"))}` : ""}</p>
           {data.items.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center"><h2 className="font-semibold">Откликов по выбранным условиям пока нет</h2><p className="mt-2 text-sm text-slate-500">Измените поисковый запрос или фильтры.</p></div> : <div className="space-y-3">
-            {data.items.map((application) => <a key={application.id} href={`/applications/${application.id}?back=${encodeURIComponent(`/applications?${filters}`)}`} className="block rounded-2xl border border-slate-200 bg-white px-5 py-4 transition hover:border-indigo-300 hover:bg-indigo-50/30 focus-visible:outline-2 focus-visible:outline-indigo-600">
+            {data.items.map((application) => <div key={application.id}><ExportChoice id={application.id} name={application.name} blocked={application.source === "hh"} /><a href={`/applications/${application.id}?back=${encodeURIComponent(`/applications?${filters}`)}`} className="block rounded-2xl border border-slate-200 bg-white px-5 py-4 transition hover:border-indigo-300 hover:bg-indigo-50/30 focus-visible:outline-2 focus-visible:outline-indigo-600">
               <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-semibold text-indigo-700">{application.name}</span><span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}><MatchBadge value={application.match} /><span style={stageStyle(application.status)}>{stages[application.status] ?? application.status}</span></span></div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{application.vacancy_title ?? "Вакансия недоступна"}</span><span>{sourceLabel(application.source)}</span><span>{dateLabel(application.created_at)}</span></div>
               {application.next_action && <div style={{ marginTop: 12, borderRadius: 10, padding: "10px 12px", backgroundColor: application.next_action.overdue ? "#fcebec" : "#f1f5f9", color: application.next_action.overdue ? "#991b1b" : "#475569", fontSize: 12 }}>
                 <strong>{application.next_action.overdue ? "Просрочено" : "Следующее действие"}:</strong> {application.next_action.title} · {dateLabel(application.next_action.due_at)} ({data.timezone})
               </div>}
               <p className="mt-3 text-xs text-slate-500">Открыть карточку →</p>
-            </a>)}
+            </a></div>)}
           </div>}
           {data.pages > 1 && <nav aria-label="Страницы откликов" className="flex items-center justify-between gap-4 text-sm">
             {data.page > 1 ? <a href={url({ page: String(data.page-1) })} className="rounded-xl border border-slate-200 bg-white px-4 py-2">← Назад</a> : <span />}
             <span className="text-slate-500">Страница {data.page} из {data.pages}</span>
             {data.page < data.pages ? <a href={url({ page: String(data.page+1) })} className="rounded-xl border border-slate-200 bg-white px-4 py-2">Далее →</a> : <span />}
           </nav>}
+          </ExportPanel>
         </>}
       </div>
     </main>
