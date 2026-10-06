@@ -1,3 +1,4 @@
+from fastapi import Header
 import json
 import sqlite3
 from contextlib import asynccontextmanager, closing
@@ -66,6 +67,12 @@ def init_db():
 async def lifespan(app: FastAPI):
     init_db()
     init_vacancy_archive(connect_db)
+    with closing(connect_db()) as c, c:
+        c.execute("""CREATE TABLE IF NOT EXISTS application_telegram_recipients (
+            application_id INTEGER PRIMARY KEY REFERENCES applications(id),
+            chat_id INTEGER NOT NULL CHECK(chat_id > 0),
+            captured_at TEXT NOT NULL
+        )""")
     init_candidate_workflow(connect_db)
     yield
 
@@ -125,6 +132,10 @@ class ApplicationCreate(BaseModel):
         "manual",
     ]
     resume_text: str = Field(min_length=1, max_length=50000)
+
+
+class BotApplicationCreate(ApplicationCreate):
+    telegram_chat_id: int | None = Field(default=None, gt=0, le=4503599627370495)
 
 
 class Application(ApplicationCreate):
@@ -197,7 +208,9 @@ def list_vacancies(include_archived: bool = False):
 
 # Создать отклик
 @app.post("/applications", response_model=Application, status_code=201)
-def create_application(application: ApplicationCreate):
+def create_application(application: BotApplicationCreate, x_bot_key: Annotated[str | None, Header()] = None):
+    if application.telegram_chat_id is not None and (not x_bot_key or application.source != 'telegram'):
+        raise HTTPException(403, 'Telegram-адресат принимается только от бота')
     created_at = datetime.now(timezone.utc).isoformat()
 
     with closing(connect_db()) as connection, connection:
@@ -235,9 +248,12 @@ def create_application(application: ApplicationCreate):
             ),
         )
         application_id = cursor.lastrowid
+        if application.telegram_chat_id is not None:
+            connection.execute('INSERT INTO application_telegram_recipients(application_id,chat_id,captured_at) VALUES(?,?,?)',
+                               (application_id, application.telegram_chat_id, created_at))
 
     return {
-        **application.model_dump(),
+        **application.model_dump(exclude={"telegram_chat_id"}),
         "id": application_id,
         "status": "new",
         "created_at": created_at,

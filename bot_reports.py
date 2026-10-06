@@ -82,6 +82,14 @@ def report_text(report, base):
         lines.append(f'• Другие: {other}')
     if not report['received']:
         lines.append('За этот период новых откликов нет.')
+    lines += ['', 'Среди откликов, поступивших за период (состояние сейчас):',
+              f"С ручной оценкой: {report['manual_assessed']}",
+              f"Без ручной оценки: {report['manual_unassessed']}", 'Этапы:']
+    for stage in report['stages']:
+        if stage['count']: lines.append(f"• {stage['label']}: {stage['count']}")
+    if not report['received']: lines.append('Нет откликов за период.')
+    lines += ['', f"Ожидают ответа от нас — за всё время: {report['awaiting_reply']}",
+              'Только явно отмеченные рекрутером отклики.',base + '/applications?reply=waiting']
     tasks = report.get('tasks')
     if tasks:
         as_of = datetime.fromisoformat(tasks['generated_at']).astimezone(ZoneInfo(tasks['timezone']))

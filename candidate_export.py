@@ -15,6 +15,7 @@ class ExportFilters(BaseModel):
     status: ApplicationStatus | None = None
     vacancy_id: int | None = Field(default=None,gt=0)
     source: str | None = Field(default=None,min_length=1,max_length=100)
+    reply: Literal['all','waiting']='all'
     q: str = Field(default='',max_length=200)
     assessment: Literal['all','none','assessed']='all'
     sort: Literal['date_desc','date_asc','match_desc','match_asc']='date_desc'

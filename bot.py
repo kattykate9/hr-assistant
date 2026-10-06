@@ -296,8 +296,8 @@ async def start(message: Message, state: FSMContext):
 
     await state.update_data(
         vacancies={
-            str(vacancy["id"]): vacancy["title"]
-            for vacancy in vacancies
+            str(number): {"id": vacancy["id"], "title": vacancy["title"]}
+            for number, vacancy in enumerate(vacancies, start=1)
         }
     )
     await state.set_state(Form.vacancy)
@@ -311,8 +311,8 @@ async def start(message: Message, state: FSMContext):
 
     # Отправляем частями, чтобы не превысить лимит Telegram.
     chunk = ""
-    for vacancy in vacancies:
-        line = f'{vacancy["id"]}. {vacancy["title"]}\n'
+    for number, vacancy in enumerate(vacancies, start=1):
+        line = f'{number}. {vacancy["title"]}\n'
         if len(chunk) + len(line) > 3500:
             await message.answer(chunk)
             chunk = ""
@@ -340,10 +340,11 @@ async def choose_vacancy(message: Message, state: FSMContext):
         await message.answer("Введите номер вакансии из списка.")
         return
 
-    await state.update_data(vacancy_id=int(choice))
+    selected = vacancies[choice]
+    await state.update_data(vacancy_id=int(selected["id"]))
     await state.set_state(Form.name)
     await message.answer(
-        f"Вакансия: {vacancies[choice]}\n\nКак вас зовут?"
+        f"Вакансия: {selected['title']}\n\nКак вас зовут?"
     )
 
 
@@ -379,6 +380,9 @@ async def receive_contact(message: Message, state: FSMContext):
 
 @router.message(Form.resume)
 async def receive_resume(message: Message, state: FSMContext):
+    if message.chat.type != 'private' or not message.from_user or message.chat.id != message.from_user.id:
+        await message.answer('Для отправки отклика откройте личный чат с ботом и отправьте /start.')
+        return
     if message.document:
         try:
             text = await get_document_text(message)
@@ -403,6 +407,7 @@ async def receive_resume(message: Message, state: FSMContext):
         "name": data["name"],
         "contact": data["contact"],
         "source": "telegram",
+        "telegram_chat_id": message.chat.id,
         "resume_text": text,
     }
 

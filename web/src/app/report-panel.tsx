@@ -1,4 +1,6 @@
 export type RecruitmentReport = {
+  manual_assessed:number;manual_unassessed:number;awaiting_reply:number;
+  stages:{status:string;label:string;count:number}[];
   mode: "latest" | "current"; kind: "morning" | "evening" | "current";
   timezone: string; period_start: string; period_end: string; generated_at: string;
   next_report_at: string; morning_time: string; evening_time: string;
@@ -35,7 +37,7 @@ export default function ReportPanel({ report, mode }: { report: RecruitmentRepor
             <p className="mt-1 text-sm text-slate-600">{reportDate(report.period_start, report.timezone)} — {reportDate(report.period_end, report.timezone)}</p>
             <p className="mt-1 text-xs text-slate-500">{report.timezone === "Asia/Nicosia" ? "Время Кипра · " : "Часовой пояс · "}{report.timezone}</p>
           </div>
-          <span className="self-start rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">Отправка в Telegram ещё не подключена</span>
+          <span className="self-start rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">Статус доставки: /report_status в боте</span>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
@@ -47,6 +49,14 @@ export default function ReportPanel({ report, mode }: { report: RecruitmentRepor
             <p className="text-sm text-slate-500">{item.label}</p><p className="mt-3 text-3xl font-semibold">{item.value}</p><p className="mt-2 text-xs leading-5 text-slate-500">{item.note}</p>
           </div>)}
         </div>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+          <h2 className="text-lg font-semibold">Ручная оценка и этапы подбора</h2>
+          <p className="mt-2 text-xs text-slate-500">Текущее состояние откликов, поступивших за выбранный период. Это не количество оценок или переходов, выполненных за период. Данные на {reportDate(report.generated_at, report.timezone)}.</p>
+          <div className="mt-4 flex flex-wrap gap-4 text-sm"><a href={`${report.applications_url}&assessment=assessed`} className="rounded-xl bg-indigo-50 p-4 text-indigo-800">С ручной оценкой: <strong>{report.manual_assessed}</strong></a><a href={`${report.applications_url}&assessment=none`} className="rounded-xl bg-slate-50 p-4 text-slate-700">Без ручной оценки: <strong>{report.manual_unassessed}</strong></a></div>
+          <p className="mt-2 text-xs text-slate-500">Есть оценка хотя бы одного критерия, включая 0%. Ручная оценка учитывается отдельно от AI.</p>
+          <ul aria-label="Распределение по этапам" className="mt-5 space-y-3">{report.stages.map(stage=><li key={stage.status}><a href={`${report.applications_url}&status=${encodeURIComponent(stage.status)}`} className="grid grid-cols-[6rem_1fr_3rem] items-center gap-3 text-sm"><span>{stage.label}</span><span aria-hidden="true" className="h-4 overflow-hidden rounded bg-slate-100"><span className="block h-full rounded" style={{backgroundColor:'#c4b5fd',width:`${stage.count/Math.max(1,report.received)*100}%`}} /></span><span className="text-right">{stage.count}</span></a></li>)}</ul>
+        </section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Ожидают ответа от нас</h2><a href="/applications?reply=waiting" className="mt-3 inline-block text-3xl font-semibold text-indigo-700">{report.awaiting_reply}</a><p className="mt-2 text-xs text-slate-500">Все явно отмеченные отклики за всё время, включая архивные вакансии. Отметка ставится и снимается в карточке кандидата.</p><a href="/applications?reply=waiting" className="mt-3 inline-block text-sm text-indigo-700">Открыть список →</a></section>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Отклики по источникам</h2><p className="mt-1 text-xs text-slate-500">За тот же период. Нажмите на источник, чтобы открыть отклики.</p></div>
             <a href={report.applications_url} className="text-sm font-medium text-indigo-600 hover:underline">Все отклики периода →</a>

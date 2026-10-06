@@ -15,7 +15,7 @@ export default function ExportPanel({query,total,choices,children}:{query:string
     if(lock.current)return;lock.current=true;setBusy(true);setError("");setMessage("");
     try {
       const params=new URLSearchParams(query),filters:Record<string,string|number>={};
-      for(const key of ["status","vacancy_id","source","q","assessment","sort","created_from","created_before"]) {const value=params.get(key);if(value)filters[key]=key==="vacancy_id"?Number(value):value;}
+      for(const key of ["reply","status","vacancy_id","source","q","assessment","sort","created_from","created_before"]) {const value=params.get(key);if(value)filters[key]=key==="vacancy_id"?Number(value):value;}
       const result=await downloadExport({mode,fields:selected,ids:mode==="selected"?ids:[],filters});
       if(result.error)setError(result.error);
       else if(result.csv!==undefined) {

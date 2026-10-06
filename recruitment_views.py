@@ -86,12 +86,22 @@ def build_report(connection, config, now=None, mode="latest", exclude_hh=False):
         + ("WHERE source != 'hh' " if exclude_hh else "")
         + "GROUP BY vacancy_id"
     )}
+    cohort = connection.execute(f"SELECT id,vacancy_id,status FROM applications WHERE {where}",params).fetchall()
+    matches = application_matches(connection,cohort)
+    manual_assessed = sum(m['has_assessment'] for m in matches.values())
+    from candidate_workflow import STAGES
+    stage_counts = {key:0 for key in STAGES}
+    for row in cohort:stage_counts[row['status']] = stage_counts.get(row['status'],0)+1
+    waiting = connection.execute("SELECT COUNT(*) FROM application_reply_flags f JOIN applications a ON a.id=f.application_id WHERE f.needs_reply=1" + (" AND a.source!='hh'" if exclude_hh else "")).fetchone()[0]
     link = "/applications?" + urlencode({"created_from": start.isoformat(), "created_before": end.isoformat()})
     return {
         "mode": mode, "kind": kind, "timezone": config["report_timezone"],
         "period_start": start.isoformat(), "period_end": end.isoformat(),
         "generated_at": now.isoformat(), "next_report_at": next_at.isoformat(),
         "morning_time": config["morning_report_time"], "evening_time": config["evening_report_time"],
+        "manual_assessed":manual_assessed,"manual_unassessed":received-manual_assessed,
+        "stages":[{"status":k,"label":STAGES.get(k,k),"count":v} for k,v in stage_counts.items()],
+        "awaiting_reply":waiting,
         "received": received, "new_in_period": new_count,
         "ai_processed": None, "ai_assessment": None, "ai_status": "not_connected",
         "sources": source_rows(counts), "applications_url": link,
@@ -119,7 +129,7 @@ def install_recruitment_views(app, connect_db):
             tasks = task_overview(connection, exclude_hh=False, include_items=False)
         # Only aggregate fields; no resume, contacts, candidate or vacancy IDs.
         fields = ("mode", "kind", "timezone", "period_start", "period_end", "next_report_at",
-                  "received", "new_in_period", "ai_processed", "ai_assessment", "ai_status", "applications_url")
+                  "generated_at", "manual_assessed", "manual_unassessed", "stages", "awaiting_reply", "received", "new_in_period", "ai_processed", "ai_assessment", "ai_status", "applications_url")
         result = {key: data[key] for key in fields}
         result["sources"] = data["sources"]
         result["tasks"] = tasks
@@ -138,8 +148,9 @@ def install_recruitment_views(app, connect_db):
         created_before: AwareDatetime | None = None,
         page: Annotated[int, Query(ge=1)] = 1,
         page_size: Annotated[int, Query(ge=1, le=100)] = 30,
+        reply: Literal["all", "waiting"] = "all",
     ):
-        return query_applications(status, vacancy_id, source, q, assessment, sort, created_from, created_before, page, page_size)
+        return query_applications(status, vacancy_id, source, q, assessment, sort, created_from, created_before, page, page_size, reply)
 
     def query_applications(
         status: ApplicationStatus | None = None,
@@ -152,6 +163,7 @@ def install_recruitment_views(app, connect_db):
         created_before: AwareDatetime | None = None,
         page: Annotated[int, Query(ge=1)] = 1,
         page_size: Annotated[int, Query(ge=1, le=100)] = 30,
+        reply: Literal["all", "waiting"] = "all",
         export_request=None,
     ):
         if created_from and created_before and created_from > created_before:
@@ -166,6 +178,8 @@ def install_recruitment_views(app, connect_db):
         evaluated = "assessment_metric(e.criteria_json, e.answers_json, 'has_assessment')"
         percent = "assessment_metric(e.criteria_json, e.answers_json, 'percent')"
         clauses, params = [], []
+        if reply == "waiting":
+            clauses.append("EXISTS (SELECT 1 FROM application_reply_flags f WHERE f.application_id=a.id AND f.needs_reply=1)")
         if status:
             clauses.append("a.status = ?"); params.append(status)
         if vacancy_id is not None:

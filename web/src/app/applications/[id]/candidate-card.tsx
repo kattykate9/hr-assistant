@@ -1,5 +1,8 @@
 "use client";
 import { useRef, useState, type FormEvent } from "react";
+import CommunicationPanel from "./communication-panel";
+import ResumePreview from "./resume-preview";
+import ReplyPanel from "./reply-panel";
 import TaskPanel from "./task-panel";
 import AssessmentPanel from "./assessment-panel";
 import { saveCandidate } from "./actions";
@@ -57,12 +60,14 @@ export default function CandidateCard({ initial }: { initial: ApplicationCard })
     {error && <p role="alert" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{error} <a href="" className="underline">Обновить карточку</a></p>}
     {success && <p role="status" className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">{success}</p>}
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <section className={box}><h2 className="text-lg font-semibold">Резюме</h2><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700">{a.resume_text}</p><p className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">AI-оценка пока не подключена. Решение по кандидату принимает рекрутер.</p></section>
+      <section className={box}><h2 className="text-lg font-semibold">Резюме</h2><ResumePreview key={a.id} text={a.resume_text} /><p className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">AI-оценка пока не подключена. Решение по кандидату принимает рекрутер.</p></section>
       <div className="space-y-6">
         <section className={box}><h2 className="text-lg font-semibold">Этап подбора</h2><form onSubmit={(event) => submit(event, "stage")} className="mt-4 space-y-4"><label className="block text-sm">Выберите этап<select aria-label="Этап подбора" value={stage} onChange={(event) => setStage(event.target.value)} disabled={busy} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">{Object.entries(data.stages).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className={button} disabled={busy || stage === a.status}>Сохранить этап</button><p className="text-xs text-slate-500">Можно выбрать любой этап или вернуться к предыдущему. Изменение попадёт в историю.</p></form></section>
         <section className={box}><h2 className="text-lg font-semibold">Заметка рекрутера</h2><form onSubmit={(event) => submit(event, "note")} className="mt-4 space-y-3"><textarea aria-label="Заметка рекрутера" value={note} onChange={(event) => { setNote(event.target.value); noteRequest.current = null; }} disabled={busy} required maxLength={5000} rows={5} placeholder="Что обсудили, что уточнить, следующий шаг…" className="w-full rounded-xl border border-slate-300 p-3 text-sm" /><div className="flex items-center justify-between gap-3"><button className={button} disabled={busy || !note.trim()}>Добавить заметку</button><span className="text-xs text-slate-400">{note.length} / 5000</span></div><p className="text-xs text-slate-500">Заметка сохранится к этапу «{stageLabel(a.status)}». Для другого этапа сначала сохраните его.</p></form></section>
       </div>
     </div>
+    <ReplyPanel key={`reply-${a.id}`} id={a.id} initial={initial.reply_tracking} />
+    <CommunicationPanel key={a.id} id={a.id} name={a.name} vacancy={a.vacancy_title} />
     <TaskPanel id={a.id} initial={initial.next_action} />
     <AssessmentPanel id={a.id} initial={initial.assessment} timezone={data.timezone} />
     <section className={box}>

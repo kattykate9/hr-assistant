@@ -31,7 +31,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const get = (name: string) => { const value = params[name]; return (Array.isArray(value) ? value[0] : value) ?? ""; };
   const filters = new URLSearchParams();
-  for (const key of ["source", "status", "vacancy_id", "created_from", "created_before", "page", "q", "assessment", "sort"]) if (get(key)) filters.set(key, get(key));
+  for (const key of ["reply", "source", "status", "vacancy_id", "created_from", "created_before", "page", "q", "assessment", "sort"]) if (get(key)) filters.set(key, get(key));
   let data: Data | null = null;
   let vacancies: Vacancy[] = [];
   let vacanciesError = false;
@@ -85,6 +85,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
               </select>
             </label>
           </div>
+          <label className="block text-sm font-medium">Ответ кандидату<select name="reply" defaultValue={get("reply") || "all"} className={field}><option value="all">Все отклики</option><option value="waiting">Ожидают ответа от нас</option></select></label>
           <p className="text-xs text-slate-500">Поиск без учёта регистра: должны встретиться все введённые слова. При сортировке по оценке критериев вакансии отклики без оценки идут в конце.</p>
           <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
             <label className="text-sm font-medium">Источник
