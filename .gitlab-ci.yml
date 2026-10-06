@@ -33,7 +33,7 @@ variables:
       docker build
       --pull
       --no-cache
-      --file=./deploy/Dockerfile.base-back
+      --file=./deploy/Dockerfile.back-base
       --tag "$HR_CI_REGISTRY_IMAGE:$BASE_TAG"
       .
     - docker push "$HR_CI_REGISTRY_IMAGE:$BASE_TAG"
@@ -69,7 +69,7 @@ build-back-base-production:
         - deploy/Dockerfile.back-base
         - requirements.txt
 
-build-base-staging:
+build-back-base-staging:
   extends: [.build_base_template]
   rules:
     - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'
