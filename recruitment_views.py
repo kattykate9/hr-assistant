@@ -113,15 +113,15 @@ def install_recruitment_views(app, connect_db):
     def telegram_report():
         with closing(connect_db()) as connection:
             connection.execute("BEGIN")
-            data = build_report(connection, settings(connection), exclude_hh=True)
-            tasks = task_overview(connection, exclude_hh=True, include_items=False)
-        # Only aggregate fields; no resume, contacts, vacancy IDs or hh totals.
+            data = build_report(connection, settings(connection), exclude_hh=False)
+            tasks = task_overview(connection, exclude_hh=False, include_items=False)
+        # Only aggregate fields; no resume, contacts, candidate or vacancy IDs.
         fields = ("mode", "kind", "timezone", "period_start", "period_end", "next_report_at",
                   "received", "new_in_period", "ai_processed", "ai_assessment", "ai_status", "applications_url")
         result = {key: data[key] for key in fields}
-        result["sources"] = [row for row in data["sources"] if row["source"] != "hh"]
+        result["sources"] = data["sources"]
         result["tasks"] = tasks
-        result["scope"] = "without_hh"
+        result["scope"] = "all_sources_aggregates"
         return result
 
     @router.get("/applications")

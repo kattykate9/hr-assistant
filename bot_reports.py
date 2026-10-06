@@ -66,15 +66,13 @@ def report_text(report, base):
     end = datetime.fromisoformat(report['period_end']).astimezone(zone)
     title = 'Утренний' if report['kind'] == 'morning' else 'Вечерний'
     lines = [f'{title} отчёт HR Assistant', f'{start:%d.%m.%Y %H:%M} — {end:%d.%m.%Y %H:%M}',
-             f'Часовой пояс: {zone.key}', '', 'Без откликов hh.ru (до согласования условий).',
+             f'Часовой пояс: {zone.key}', '', 'Все источники, включая hh.ru.',
              f"Получено откликов: {report['received']}",
              f"Из них сейчас в статусе «новый»: {report['new_in_period']}",
              'AI-обработка и первичная AI-оценка не подключены.', '', 'Источники:']
-    labels = {'telegram': 'Telegram', 'manual': 'Вручную', 'website': 'Сайт', 'linkedin': 'LinkedIn', 'djinni': 'Djinni'}
+    labels = {'hh': 'hh.ru', 'telegram': 'Telegram', 'manual': 'Вручную', 'website': 'Сайт', 'linkedin': 'LinkedIn', 'djinni': 'Djinni'}
     other = 0
     for row in report['sources']:
-        if row['source'] == 'hh':
-            raise ValueError('Недопустимый источник в Telegram-отчёте')
         if row['source'] in labels:
             if row['count']:
                 lines.append(f"• {labels[row['source']]}: {row['count']}")
@@ -87,15 +85,15 @@ def report_text(report, base):
     tasks = report.get('tasks')
     if tasks:
         as_of = datetime.fromisoformat(tasks['generated_at']).astimezone(ZoneInfo(tasks['timezone']))
-        lines += ['', f"Действия на {as_of:%d.%m.%Y %H:%M} ({tasks['timezone']}), без hh.ru:",
+        lines += ['', f"Действия на {as_of:%d.%m.%Y %H:%M} ({tasks['timezone']}):",
                   f"Просроченные: {tasks['overdue_count']}", f"Сегодня, ещё предстоит: {tasks['today_count']}",
                   f"Всего открытых: {tasks['open_count']}",
-                  'Задачи в защищённом кабинете (включая hh, если они есть):', base + '/#tasks']
+                  'Планирование в защищённом кабинете:', base + '/planning']
     # Link comes from our aggregate endpoint, never from candidate input.
     path = report['applications_url']
     if not path.startswith('/applications?') or '\n' in path or '\r' in path:
         raise ValueError('Неверная ссылка отчёта')
-    lines += ['', 'Все отклики за период в кабинете (включая hh, если они есть):', base + path]
+    lines += ['', 'Все отклики за период в защищённом кабинете:', base + path]
     if urlsplit(base).hostname in ('127.0.0.1', 'localhost', '::1'):
         lines.append('Локальная ссылка: открывается только на Mac с запущенным приложением.')
     lines += ['', 'Это последний завершённый период. Текущий период доступен в кабинете.']
@@ -134,7 +132,7 @@ class ReportService:
             r = await client.get(self.api_url + '/recruiting/telegram-report', headers={'X-Bot-Key': self.key})
             r.raise_for_status()
             data = r.json()
-        if data.get('scope') != 'without_hh' or data.get('mode') != 'latest':
+        if data.get('scope') != 'all_sources_aggregates' or data.get('mode') != 'latest':
             raise ValueError('Неожиданный формат отчёта')
         self.next_at = data['next_report_at']
         return data
@@ -168,7 +166,7 @@ class ReportService:
                     'unknown': 'доставка не подтверждена; получите отчёт через /report',
                     'blocked': 'Telegram отклонил отправку; проверьте доступ бота к чату'}
         parts = ['Бот запущен. Автоотчёты включены.', 'Расписание берётся из настроек компании в кабинете.',
-                 'Отклики hh.ru исключены.']
+                 'В отчёте учитываются все источники, включая hh.ru.']
         if self.next_at:
             parts.append('Следующая граница периода: ' + self.next_at)
         if latest:
