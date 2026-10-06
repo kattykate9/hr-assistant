@@ -61,39 +61,37 @@ variables:
     # Повторный stack deploy обновляет образ и конфигурацию из DOTENV_FILE.
     - timeout -v "$DOCKER_DEPLOY_TIMEOUT" docker stack deploy --with-registry-auth --prune -c deploy/docker-stack.yml "$STACK_NAME" --detach=false
 
-build-base-production:
+build-back-base-production:
   extends: [.build_base_template]
   rules:
-    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
       changes:
-        - deploy/Dockerfile.base
-        - pyproject.toml
-        - uv.lock
+        - deploy/Dockerfile.back-base
+        - requirements.txt
 
 build-base-staging:
   extends: [.build_base_template]
   rules:
     - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'
       changes:
-        - deploy/Dockerfile.base
-        - pyproject.toml
-        - uv.lock
+        - deploy/Dockerfile.back-base
+        - requirements.txt
 
 build-deploy-production:
   extends: [.build_deploy_template]
   environment:
     name: production
-    url: https://pocket.baklajan.io
+    url: https://hr.baklajan.io
   variables:
     PUBLISHED_PORT: "18083"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
 
 build-deploy-staging:
   extends: [.build_deploy_template]
   environment:
     name: staging
-    url: https://pocket-staging.baklajan.io
+    url: https://hr-staging.baklajan.io
   variables:
     PUBLISHED_PORT: "8083"
   rules:
