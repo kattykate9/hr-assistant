@@ -34,6 +34,55 @@ api ──HTTPS──> api.openai.com (генерация черновиков �
 7. **Резюме в формате `.doc`** читаются только на macOS (`textutil`). На Linux бот вежливо попросит прислать PDF/DOCX — это ожидаемо. PDF и DOCX работают.
 8. Авторизация кабинета — HTTP Basic (логин `ADMIN_USERNAME`, пароль по хешу argon2). Поэтому кабинет **только за HTTPS**.
 
+## docker-compose.yml
+
+Файл лежит в корне репозитория, приведён целиком для справки:
+
+```yaml
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    volumes:
+      # security.py и ai_vacancy.py читают именно файл /app/.env, а не переменные окружения
+      - ./.env:/app/.env:ro
+      - hr-data:/app/data
+    ports:
+      # Наружу публикуется только веб (порт 3000) через reverse proxy.
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    # Веб ходит в API по жёстко прописанному http://127.0.0.1:8000,
+    # поэтому делит сетевой namespace с контейнером api.
+    network_mode: "service:api"
+    depends_on:
+      - api
+
+  bot:
+    build: .
+    restart: unless-stopped
+    command: ["python", "bot.py"]
+    env_file: .env
+    environment:
+      API_BASE_URL: http://api:8000
+    volumes:
+      - ./.env:/app/.env:ro
+      - hr-data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  hr-data:
+```
+
 ## Переменные окружения (`.env`)
 
 Шаблон — `.env.example`. Реальные значения передаются отдельно, в git не коммитятся.
@@ -64,7 +113,7 @@ docker compose run --rm --no-deps api python -c "from argon2 import PasswordHash
 ## Первый деплой
 
 ```bash
-git clone <gitlab-url>/hr-assistant.git /opt/hr-assistant
+git clone ssh://git@gitlab.advextech.com:2022/academy/hr.git /opt/hr-assistant
 cd /opt/hr-assistant
 
 cp .env.example .env
