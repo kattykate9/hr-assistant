@@ -49,3 +49,7 @@ resumes/
 
 # macOS
 .DS_Store
+
+# Docker
+!.env.example
+data/

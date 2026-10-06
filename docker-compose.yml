@@ -1,0 +1,42 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    volumes:
+      # security.py и ai_vacancy.py читают именно файл /app/.env, а не переменные окружения
+      - ./.env:/app/.env:ro
+      - hr-data:/app/data
+    ports:
+      # Наружу публикуется только веб (порт 3000) через reverse proxy.
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    # Веб ходит в API по жёстко прописанному http://127.0.0.1:8000,
+    # поэтому делит сетевой namespace с контейнером api.
+    network_mode: "service:api"
+    depends_on:
+      - api
+
+  bot:
+    build: .
+    restart: unless-stopped
+    command: ["python", "bot.py"]
+    env_file: .env
+    environment:
+      API_BASE_URL: http://api:8000
+    volumes:
+      - ./.env:/app/.env:ro
+      - hr-data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  hr-data:

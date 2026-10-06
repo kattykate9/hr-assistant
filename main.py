@@ -62,6 +62,10 @@ def init_db():
             """)
 
 
+# Базовые таблицы нужны до install_* ниже: они мигрируют vacancies при импорте
+init_db()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
