@@ -1,11 +1,34 @@
 version: "3.8"
 
 services:
-  bot:
-    image: ${PO_CI_REGISTRY_IMAGE}:${APP_TAG}
+  api:
+    image: ${HR_CI_REGISTRY_IMAGE}:${APP_TAG}
     env_file:
       - ${DOTENV_FILE}
-    command: ["sh", "-c", "alembic upgrade head && exec gpt-pocket-bot"]
+    command:
+      [
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "1",
+      ]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       replicas: 1
       restart_policy:
@@ -15,29 +38,14 @@ services:
         order: stop-first
         failure_action: rollback
 
-  admin:
-    image: ${PO_CI_REGISTRY_IMAGE}:${APP_TAG}
+  bot:
+    image: ${HR_CI_REGISTRY_IMAGE}:${APP_TAG}
     env_file:
       - ${DOTENV_FILE}
+    restart: unless-stopped
+    command: ["python", "bot.py"]
     environment:
-      ADMIN_HOST: 0.0.0.0
-    command: ["gpt-pocket-admin"]
-    ports:
-      - mode: ingress
-        target: 8080
-        published: ${PUBLISHED_PORT}
-        protocol: tcp
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
+      API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
