@@ -1,9 +1,9 @@
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 
-COPY web /
-ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /web
+COPY web .
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 RUN npm ci --omit=dev && npm cache clean --force
