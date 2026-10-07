@@ -81,7 +81,7 @@ build-deploy-production:
     name: production
     url: https://hr.baklajan.io
   variables:
-    PUBLISHED_PORT: "18083"
+    BACK_PUBLISHED_PORT: "18084"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
 
@@ -91,6 +91,6 @@ build-deploy-staging:
     name: staging
     url: https://hr-staging.baklajan.io
   variables:
-    PUBLISHED_PORT: "8083"
+    BACK_PUBLISHED_PORT: "8084"
   rules:
     - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'
