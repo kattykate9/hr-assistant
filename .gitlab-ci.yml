@@ -91,7 +91,7 @@ build-back-base-production:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
       changes:
         - deploy/Dockerfile.back-base
-        - requirements.txt
+        - back/requirements.txt
 
 build-back-base-staging:
   extends: [.build_back_base_template]
@@ -99,7 +99,7 @@ build-back-base-staging:
     - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'
       changes:
         - deploy/Dockerfile.back-base
-        - requirements.txt
+        - back/requirements.txt
 
 build-web-base-production:
   extends: [.build_web_base_template]
