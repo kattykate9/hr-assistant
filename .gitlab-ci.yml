@@ -19,8 +19,9 @@ variables:
 .vars:
   variables:
     BACK_TAG: back-$CI_COMMIT_SHA
-    BACK_LATEST_TAG: ${CI_COMMIT_REF_SLUG}-back-latest
-    BACK_BASE_TAG: ${CI_COMMIT_REF_SLUG}-back-base
+    BACK_BASE_TAG: ${CI_COMMIT_REF_SLUG}-web-base
+    WEB_TAG: back-$CI_COMMIT_SHA
+    WEB_BASE_TAG: ${CI_COMMIT_REF_SLUG}-web-base
 
 .build_back_base_template:
   extends: [.kostyl_template, .vars]
@@ -37,6 +38,22 @@ variables:
       --tag "$HR_CI_REGISTRY_IMAGE:$BACK_BASE_TAG"
       .
     - docker push "$HR_CI_REGISTRY_IMAGE:$BACK_BASE_TAG"
+
+.build_web_base_template:
+  extends: [.kostyl_template, .vars]
+  stage: build_base
+  interruptible: true
+  script:
+    - echo -n "$HR_CI_REGISTRY_PASSWORD" | docker login -u "$HR_CI_REGISTRY_USER" --password-stdin "$HR_CI_REGISTRY"
+    - >
+      DOCKER_BUILDKIT=1
+      docker build
+      --pull
+      --no-cache
+      --file=./deploy/Dockerfile.web-base
+      --tag "$HR_CI_REGISTRY_IMAGE:$WEB_BASE_TAG"
+      .
+    - docker push "$HR_CI_REGISTRY_IMAGE:$WEB_BASE_TAG"
 
 .build_deploy_template:
   extends: [.kostyl_template, .vars]
@@ -56,7 +73,16 @@ variables:
       --tag "$HR_CI_REGISTRY_IMAGE:$BACK_TAG"
       .
     - docker push "$HR_CI_REGISTRY_IMAGE:$BACK_TAG"
-    # Повторный stack deploy обновляет образ и конфигурацию из DOTENV_FILE.
+    - >
+      DOCKER_BUILDKIT=1
+      docker build
+      --pull
+      --no-cache
+      --file=./deploy/Dockerfile.web
+      --build-arg "BASE_IMAGE=$HR_CI_REGISTRY_IMAGE:$WEB_BASE_TAG"
+      --tag "$HR_CI_REGISTRY_IMAGE:$WEB_TAG"
+      .
+    - docker push "$HR_CI_REGISTRY_IMAGE:$WEB_TAG"
     - timeout -v "$DOCKER_DEPLOY_TIMEOUT" docker stack deploy --with-registry-auth --prune -c deploy/docker-stack.yml "$STACK_NAME" --detach=false
 
 build-back-base-production:
