@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   api:
-    image: ${HR_CI_REGISTRY_IMAGE}:${APP_TAG}
+    image: ${HR_CI_REGISTRY_IMAGE}:${BACK_TAG}
     env_file:
       - ${DOTENV_FILE}
     command:
@@ -39,7 +39,7 @@ services:
         failure_action: rollback
 
   bot:
-    image: ${HR_CI_REGISTRY_IMAGE}:${APP_TAG}
+    image: ${HR_CI_REGISTRY_IMAGE}:${BACK_TAG}
     env_file:
       - ${DOTENV_FILE}
     restart: unless-stopped
