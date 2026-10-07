@@ -101,6 +101,24 @@ build-back-base-staging:
         - deploy/Dockerfile.back-base
         - requirements.txt
 
+build-web-base-production:
+  extends: [.build_web_base_template]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+      changes:
+        - deploy/Dockerfile.web-base
+        - web/package.json
+        - web/package-lock.json
+
+build-web-base-staging:
+  extends: [.build_web_base_template]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+      changes:
+        - deploy/Dockerfile.web-base
+        - web/package.json
+        - web/package-lock.json
+
 build-deploy-production:
   extends: [.build_deploy_template]
   environment:
