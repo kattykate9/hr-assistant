@@ -18,7 +18,7 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    const response = await fetch("http://127.0.0.1:8000/auth/check", {
+    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/auth/check`, {
       headers: { Authorization: authorization },
       cache: "no-store",
       signal: AbortSignal.timeout(10000),
