@@ -19,8 +19,8 @@ variables:
 .vars:
   variables:
     BACK_TAG: back-$CI_COMMIT_SHA
-    BACK_BASE_TAG: ${CI_COMMIT_REF_SLUG}-web-base
-    WEB_TAG: back-$CI_COMMIT_SHA
+    BACK_BASE_TAG: ${CI_COMMIT_REF_SLUG}-back-base
+    WEB_TAG: web-$CI_COMMIT_SHA
     WEB_BASE_TAG: ${CI_COMMIT_REF_SLUG}-web-base
 
 .build_back_base_template:
