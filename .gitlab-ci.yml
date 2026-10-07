@@ -54,10 +54,8 @@ variables:
       --file=./deploy/Dockerfile.back
       --build-arg "BASE_IMAGE=$HR_CI_REGISTRY_IMAGE:$BACK_BASE_TAG"
       --tag "$HR_CI_REGISTRY_IMAGE:$BACK_TAG"
-      #--tag "$HR_CI_REGISTRY_IMAGE:$BACK_LATEST_TAG"
       .
     - docker push "$HR_CI_REGISTRY_IMAGE:$BACK_TAG"
-    #- docker push "$HR_CI_REGISTRY_IMAGE:$LATEST_TAG"
     # Повторный stack deploy обновляет образ и конфигурацию из DOTENV_FILE.
     - timeout -v "$DOCKER_DEPLOY_TIMEOUT" docker stack deploy --with-registry-auth --prune -c deploy/docker-stack.yml "$STACK_NAME" --detach=false
 
