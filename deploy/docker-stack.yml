@@ -17,7 +17,7 @@ services:
         "1",
       ]
     ports:
-      - "8000:${BACK_PUBLISHED_PORT}"
+      - "${BACK_PUBLISHED_PORT}:8080"
     healthcheck:
       test:
         [
