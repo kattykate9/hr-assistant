@@ -8,3 +8,5 @@ aiogram>=3.13,<4
 pypdf>=4.0
 defusedxml>=0.7
 tzdata
+psycopg[binary]>=3.2
+psycopg-pool>=3.2

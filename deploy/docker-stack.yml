@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  api:
+    image: ${HR_CI_REGISTRY_IMAGE}:${BACK_TAG}
+    env_file:
+      - ${DOTENV_FILE}
+    command:
+      [
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "1",
+      ]
+    ports:
+      - "${BACK_PUBLISHED_PORT}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+
+  bot:
+    image: ${HR_CI_REGISTRY_IMAGE}:${BACK_TAG}
+    env_file:
+      - ${DOTENV_FILE}
+    restart: unless-stopped
+    command: ["python", "bot.py"]
+    environment:
+      API_BASE_URL: http://api:8000
+
+  web:
+    image: ${HR_CI_REGISTRY_IMAGE}:${WEB_TAG}
+    env_file:
+      - ${DOTENV_FILE}
+    restart: unless-stopped
+    command: ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]
+    ports:
+      - "${WEB_PUBLISHED_PORT}:3000"
