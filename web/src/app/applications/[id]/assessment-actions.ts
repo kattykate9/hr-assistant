@@ -6,7 +6,7 @@ export async function saveAssessment(id: number, payload: { version: number; cri
   const authorization = (await headers()).get("authorization");
   if (!authorization) return { error: "Войдите в кабинет заново. Черновик остаётся в форме." };
   try {
-    const response = await fetch(`http://127.0.0.1:8000/recruiting/applications/${id}/assessment`, {
+    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}/assessment`, {
       method: "PUT", headers: { Authorization: authorization, "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
       body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(15000),
     });

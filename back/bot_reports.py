@@ -1,9 +1,6 @@
 """Private aggregate reports. No candidate texts are fetched or sent."""
 import asyncio
-import sqlite3
-from contextlib import closing
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -12,6 +9,9 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import LinkPreviewOptions
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+import psycopg
+
+from db import CONNECTION_KWARGS, database_url, init_db
 
 
 def now_utc():
@@ -30,34 +30,34 @@ def valid_base_url(value):
 
 
 class Ledger:
-    def __init__(self, path):
-        self.path = path
-        with closing(self.connect()) as c, c:
-            c.execute('CREATE TABLE IF NOT EXISTS report_delivery (recipient INTEGER, period TEXT, status TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(recipient, period))')
+    def __init__(self, url):
+        self.url = url
+        with self.connect() as c:
+            init_db(c)
 
     def connect(self):
-        return sqlite3.connect(self.path, timeout=10)
+        return psycopg.connect(self.url, connect_timeout=10, **CONNECTION_KWARGS)
 
     def claim(self, recipient, period):
         # First installation establishes a baseline; no unsolicited old report.
-        with closing(self.connect()) as c, c:
-            c.execute('BEGIN IMMEDIATE')
-            first = c.execute('SELECT 1 FROM report_delivery WHERE recipient=? LIMIT 1', (recipient,)).fetchone() is None
+        with self.connect() as c:
+            c.execute('LOCK TABLE report_delivery IN SHARE ROW EXCLUSIVE MODE')
+            first = c.execute('SELECT 1 FROM report_delivery WHERE recipient=%s LIMIT 1', (recipient,)).fetchone() is None
             status = 'baseline' if first else 'sending'
-            cursor = c.execute('INSERT OR IGNORE INTO report_delivery VALUES (?, ?, ?, ?)', (recipient, period, status, now_utc().isoformat()))
+            cursor = c.execute('INSERT INTO report_delivery VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING', (recipient, period, status, now_utc()))
             return cursor.rowcount == 1 and not first
 
     def finish(self, recipient, period, status):
-        with closing(self.connect()) as c, c:
-            c.execute('UPDATE report_delivery SET status=?, updated_at=? WHERE recipient=? AND period=?', (status, now_utc().isoformat(), recipient, period))
+        with self.connect() as c:
+            c.execute('UPDATE report_delivery SET status=%s, updated_at=%s WHERE recipient=%s AND period=%s', (status, now_utc(), recipient, period))
 
     def release(self, recipient, period):
-        with closing(self.connect()) as c, c:
-            c.execute("DELETE FROM report_delivery WHERE recipient=? AND period=? AND status='sending'", (recipient, period))
+        with self.connect() as c:
+            c.execute("DELETE FROM report_delivery WHERE recipient=%s AND period=%s AND status='sending'", (recipient, period))
 
     def latest(self, recipient):
-        with closing(self.connect()) as c:
-            return c.execute('SELECT status, updated_at FROM report_delivery WHERE recipient=? ORDER BY updated_at DESC LIMIT 1', (recipient,)).fetchone()
+        with self.connect() as c:
+            return c.execute('SELECT status, updated_at FROM report_delivery WHERE recipient=%s ORDER BY updated_at DESC LIMIT 1', (recipient,)).fetchone()
 
 
 def report_text(report, base):
@@ -101,14 +101,14 @@ def report_text(report, base):
 
 
 class ReportService:
-    def __init__(self, api_url, key, env, root):
+    def __init__(self, api_url, key, env):
         raw_id = env.get('TELEGRAM_REPORT_CHAT_ID', '').strip()
         if raw_id and (not raw_id.isdecimal() or int(raw_id) <= 0):
             raise ValueError('TELEGRAM_REPORT_CHAT_ID должен быть положительным числом из /myid.')
         self.recipient = int(raw_id) if raw_id else None
         self.base = valid_base_url(env.get('WEB_BASE_URL', 'http://127.0.0.1:3000'))
         self.api_url, self.key = api_url, key
-        self.ledger = Ledger(Path(root) / 'telegram_reports.db') if self.recipient else None
+        self.ledger = Ledger(database_url()) if self.recipient else None
         self.next_at = None
         self.last_error = None
         self.retry_at = 0.0
@@ -170,7 +170,7 @@ class ReportService:
         if self.next_at:
             parts.append('Следующая граница периода: ' + self.next_at)
         if latest:
-            parts.append('Последняя запись: ' + statuses.get(latest[0], latest[0]))
+            parts.append('Последняя запись: ' + statuses.get(latest['status'], latest['status']))
         if self.last_error:
             parts.append('Последняя ошибка: ' + self.last_error + '. Проверьте сервер и соединение.')
         parts.append('Ручной отчёт: /report. Команда не отменяет отправку по расписанию.')

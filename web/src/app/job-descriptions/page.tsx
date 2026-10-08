@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-const API = "http://127.0.0.1:8000/job-descriptions";
+const API = `${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/job-descriptions`;
 
 type JD = {
   id: number;

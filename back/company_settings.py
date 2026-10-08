@@ -1,13 +1,12 @@
 """Local single-company settings. Does not schedule or send reports."""
-import json
 import re
-from contextlib import closing
 from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -79,47 +78,38 @@ class SettingsResponse(CompanySettings):
     reports_status: Literal["not_connected"] = "not_connected"
 
 
+def init_company_settings(connection):
+    connection.execute(
+        "INSERT INTO company_settings (id, data, version) VALUES (1, %s, 1) ON CONFLICT (id) DO NOTHING",
+        (Jsonb(CompanySettings().model_dump()),),
+    )
+
+
 def install_company_settings(app, connect_db):
     router = APIRouter(tags=["Настройки компании"])
-    with closing(connect_db()) as connection:
-        with connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS company_settings (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    data TEXT NOT NULL,
-                    version INTEGER NOT NULL DEFAULT 1,
-                    updated_at TEXT
-                )
-            """)
-            connection.execute(
-                "INSERT OR IGNORE INTO company_settings (id, data, version) VALUES (1, ?, 1)",
-                (CompanySettings().model_dump_json(),),
-            )
 
     def response_from_row(row):
-        return {**json.loads(row["data"]), "version": row["version"],
+        return {**row["data"], "version": row["version"],
                 "updated_at": row["updated_at"], "reports_status": "not_connected"}
 
     # Both endpoints inherit the existing application-wide security middleware.
     @router.get("/settings/company", response_model=SettingsResponse)
     def get_settings():
-        with closing(connect_db()) as connection:
+        with connect_db() as connection:
             row = connection.execute("SELECT * FROM company_settings WHERE id = 1").fetchone()
         return response_from_row(row)
 
     @router.put("/settings/company", response_model=SettingsResponse)
     def save_settings(data: SettingsUpdate):
         values = data.model_dump(exclude={"version"})
-        now = datetime.now(timezone.utc).isoformat()
-        with closing(connect_db()) as connection:
-            with connection:
-                cursor = connection.execute(
-                    "UPDATE company_settings SET data = ?, version = version + 1, updated_at = ? WHERE id = 1 AND version = ?",
-                    (json.dumps(values, ensure_ascii=False), now, data.version),
-                )
-                if cursor.rowcount != 1:
-                    raise HTTPException(409, "Настройки уже изменены в другой вкладке. Скопируйте нужные правки и обновите страницу перед повторным сохранением.")
-                row = connection.execute("SELECT * FROM company_settings WHERE id = 1").fetchone()
+        now = datetime.now(timezone.utc)
+        with connect_db() as connection:
+            row = connection.execute(
+                "UPDATE company_settings SET data = %s, version = version + 1, updated_at = %s WHERE id = 1 AND version = %s RETURNING *",
+                (Jsonb(values), now, data.version),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(409, "Настройки уже изменены в другой вкладке. Скопируйте нужные правки и обновите страницу перед повторным сохранением.")
         return response_from_row(row)
 
     app.include_router(router)

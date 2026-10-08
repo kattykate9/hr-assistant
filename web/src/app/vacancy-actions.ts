@@ -6,7 +6,7 @@ export async function changeVacancyStatus(id: number, status: "active" | "archiv
   const authorization = (await headers()).get("authorization");
   if (!authorization) return { error: "Войдите в кабинет заново." };
   try {
-    const response = await fetch(`http://127.0.0.1:8000/vacancies/${id}/status`, { method: "PATCH", headers: { Authorization: authorization, "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" }, body: JSON.stringify({ status, version }), cache: "no-store", signal: AbortSignal.timeout(15000) });
+    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/vacancies/${id}/status`, { method: "PATCH", headers: { Authorization: authorization, "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" }, body: JSON.stringify({ status, version }), cache: "no-store", signal: AbortSignal.timeout(15000) });
     if (response.ok) return { data: await response.json() };
     if (response.status === 409) return { error: "Статус изменился в другой вкладке. Обновите страницу перед повтором." };
     if (response.status === 404) return { error: "Вакансия не найдена. Обновите страницу." };
