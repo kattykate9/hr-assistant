@@ -6,7 +6,7 @@ export async function saveTask(id: number, kind: "save" | "complete", payload: T
   const authorization = (await headers()).get("authorization");
   if (!authorization) return { error: "Войдите в кабинет заново. Скопируйте черновик перед обновлением." };
   try {
-    const response = await fetch(`http://127.0.0.1:8000/recruiting/applications/${id}/task${kind === "complete" ? "/complete" : ""}`, {
+    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}/task${kind === "complete" ? "/complete" : ""}`, {
       method: kind === "complete" ? "POST" : "PUT", headers: { Authorization: authorization, "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
       body: JSON.stringify(kind === "complete" ? { version: payload.version } : payload), cache: "no-store", signal: AbortSignal.timeout(15000),
     });

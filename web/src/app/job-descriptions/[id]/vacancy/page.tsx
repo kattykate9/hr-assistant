@@ -80,7 +80,7 @@ async function saveVacancy(
 
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/job-descriptions/${jdId}/vacancy`,
+      `${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/job-descriptions/${jdId}/vacancy`,
       {
         method: "POST",
         headers: {
@@ -129,7 +129,7 @@ async function prepareVacancy(
   if (!["ru", "en", "uk"].includes(language)) return { error: "Выберите язык вакансии." };
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/job-descriptions/${jdId}/vacancy-draft`,
+      `${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/job-descriptions/${jdId}/vacancy-draft`,
       {
         method: "POST",
         headers: {
@@ -168,7 +168,7 @@ export default async function CreateVacancyPage({
   let jd: JD | null = null;
   let company: CompanyProfile | null = null;
   try {
-    const response = await fetch("http://127.0.0.1:8000/settings/company", {
+    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
       headers: { Authorization: (await headers()).get("authorization") ?? "" },
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
@@ -184,7 +184,7 @@ export default async function CreateVacancyPage({
   if (/^[1-9]\d*$/.test(id)) {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/job-descriptions/${id}`,
+        `${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/job-descriptions/${id}`,
         {
           headers: {
             Authorization: (await headers()).get("authorization") ?? "",

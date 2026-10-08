@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import os
 import secrets
 import time
 from collections import deque
@@ -21,9 +22,15 @@ config = dotenv_values(
     interpolate=False,
 )
 
-USERNAME = config.get("ADMIN_USERNAME", "")
-PASSWORD_HASH = config.get("ADMIN_PASSWORD_HASH", "")
-BOT_KEY = config.get("BOT_API_KEY", "")
+
+# Переменные окружения (docker swarm) имеют приоритет над файлом .env.
+def setting(name):
+    return (os.environ.get(name) or config.get(name) or "").strip()
+
+
+USERNAME = setting("ADMIN_USERNAME")
+PASSWORD_HASH = setting("ADMIN_PASSWORD_HASH")
+BOT_KEY = setting("BOT_API_KEY")
 
 if not all((USERNAME, PASSWORD_HASH, BOT_KEY)):
     raise RuntimeError("Не настроены учётные данные в .env")

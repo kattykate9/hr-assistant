@@ -1,4 +1,3 @@
-from contextlib import closing
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -25,98 +24,70 @@ class JDUpdate(JDCreate):
 def install_jd(app, connect_db):
     router = APIRouter(prefix="/job-descriptions", tags=["Job Description"])
 
-    with closing(connect_db()) as connection:
-        with connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS job_descriptions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    direction TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'draft',
-                    version INTEGER NOT NULL DEFAULT 1,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    approved_at TEXT
-                )
-            """)
-
     @router.get("")
     def list_jds():
-        with closing(connect_db()) as connection:
-            rows = connection.execute(
+        with connect_db() as connection:
+            return connection.execute(
                 "SELECT * FROM job_descriptions ORDER BY id DESC"
             ).fetchall()
-        return [dict(row) for row in rows]
 
     @router.post("", status_code=201)
     def create_jd(data: JDCreate):
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
 
-        with closing(connect_db()) as connection:
-            with connection:
-                cursor = connection.execute(
-                    """
-                    INSERT INTO job_descriptions (
-                        title, direction, content, created_at, updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (data.title, data.direction, data.content, now, now),
+        with connect_db() as connection:
+            return connection.execute(
+                """
+                INSERT INTO job_descriptions (
+                    title, direction, content, created_at, updated_at
                 )
-                row = connection.execute(
-                    "SELECT * FROM job_descriptions WHERE id = ?",
-                    (cursor.lastrowid,),
-                ).fetchone()
-
-        return dict(row)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (data.title, data.direction, data.content, now, now),
+            ).fetchone()
 
     @router.put("/{jd_id}")
     def update_jd(jd_id: int, data: JDUpdate):
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         status = "approved" if data.approve else "draft"
 
-        with closing(connect_db()) as connection:
-            with connection:
-                cursor = connection.execute(
-                    """
-                    UPDATE job_descriptions
-                    SET title = ?, direction = ?, content = ?,
-                        status = ?, version = version + 1,
-                        updated_at = ?, approved_at = ?
-                    WHERE id = ? AND version = ? AND status = 'draft'
-                    """,
-                    (
-                        data.title,
-                        data.direction,
-                        data.content,
-                        status,
-                        now,
-                        now if data.approve else None,
-                        jd_id,
-                        data.version,
-                    ),
-                )
+        with connect_db() as connection:
+            row = connection.execute(
+                """
+                UPDATE job_descriptions
+                SET title = %s, direction = %s, content = %s,
+                    status = %s, version = version + 1,
+                    updated_at = %s, approved_at = %s
+                WHERE id = %s AND version = %s AND status = 'draft'
+                RETURNING *
+                """,
+                (
+                    data.title,
+                    data.direction,
+                    data.content,
+                    status,
+                    now,
+                    now if data.approve else None,
+                    jd_id,
+                    data.version,
+                ),
+            ).fetchone()
 
-                if cursor.rowcount != 1:
-                    exists = connection.execute(
-                        "SELECT id FROM job_descriptions WHERE id = ?",
-                        (jd_id,),
-                    ).fetchone()
-
-                    if exists is None:
-                        raise HTTPException(404, "JD не найден")
-
-                    raise HTTPException(
-                        409,
-                        "JD уже изменён или утверждён. Обновите страницу.",
-                    )
-
-                row = connection.execute(
-                    "SELECT * FROM job_descriptions WHERE id = ?",
+            if row is None:
+                exists = connection.execute(
+                    "SELECT id FROM job_descriptions WHERE id = %s",
                     (jd_id,),
                 ).fetchone()
 
-        return dict(row)
+                if exists is None:
+                    raise HTTPException(404, "JD не найден")
+
+                raise HTTPException(
+                    409,
+                    "JD уже изменён или утверждён. Обновите страницу.",
+                )
+
+        return row
 
     app.include_router(router)

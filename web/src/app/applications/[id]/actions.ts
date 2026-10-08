@@ -9,7 +9,7 @@ export async function saveCandidate(applicationId: number, kind: "stage" | "note
   if (!authorization) return { error: "Нужно снова войти в кабинет." };
   const body = kind === "stage" ? { version: payload.version, status: payload.status } : { version: payload.version, text: payload.text, request_id: payload.request_id };
   try {
-    const response = await fetch(`http://127.0.0.1:8000/recruiting/applications/${applicationId}/${kind === "stage" ? "stage" : "notes"}`, {
+    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${applicationId}/${kind === "stage" ? "stage" : "notes"}`, {
       method: kind === "stage" ? "PATCH" : "POST",
       headers: { Authorization: authorization, "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
       body: JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(15000),

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 async function load<T>(path: string): Promise<T | null> {
   try {
-    const response = await fetch(`http://127.0.0.1:8000${path}`, {
+    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}${path}`, {
       headers: { Authorization: (await headers()).get("authorization") ?? "" },
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });

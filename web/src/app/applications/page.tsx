@@ -37,8 +37,8 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   let error = "";
   const requestHeaders = { Authorization: (await headers()).get("authorization") ?? "" };
   const results = await Promise.allSettled([
-    fetch(`http://127.0.0.1:8000/recruiting/applications?${filters}`, { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
-    fetch("http://127.0.0.1:8000/vacancies?include_archived=true", { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
+    fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications?${filters}`, { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
+    fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/vacancies?include_archived=true`, { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
   ]);
   if (results[0].status === "fulfilled") {
     const response = results[0].value;

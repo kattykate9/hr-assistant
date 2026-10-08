@@ -468,7 +468,7 @@ async def main():
         storage=MemoryStorage(),
         events_isolation=SimpleEventIsolation(),
     )
-    reports = ReportService(API_URL, BOT_API_KEY, os.environ, Path(__file__).resolve().parent)
+    reports = ReportService(API_URL, BOT_API_KEY, os.environ)
     dispatcher.include_router(reports.router)
     dispatcher.include_router(router)
 

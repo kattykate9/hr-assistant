@@ -1,18 +1,17 @@
-import json
-import sqlite3
-from contextlib import asynccontextmanager, closing
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Annotated, Literal
 
-from vacancy_archive import init_vacancy_archive, install_vacancy_archive
-from candidate_workflow import ApplicationStatus, init_candidate_workflow, install_candidate_workflow
+from psycopg.types.json import Jsonb
+
+from db import close_pool, connect_db, init_db, open_pool
+from vacancy_archive import install_vacancy_archive
+from candidate_workflow import ApplicationStatus, install_candidate_workflow
+from company_settings import init_company_settings
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-
-DB_PATH = Path(__file__).resolve().parent / "hr_assistant.db"
 
 NonEmptyText = Annotated[
     str,
@@ -24,54 +23,14 @@ NonEmptyText = Annotated[
 ]
 
 
-# Подключение к базе данных
-def connect_db():
-    connection = sqlite3.connect(DB_PATH, timeout=10)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
-
-
-# Создание таблиц при первом запуске
-def init_db():
-    with closing(connect_db()) as connection:
-        with connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS vacancies (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    direction TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    criteria TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-            """)
-
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS applications (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    vacancy_id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    contact TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    resume_text TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'new',
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (vacancy_id) REFERENCES vacancies(id)
-                )
-            """)
-
-
-# Базовые таблицы нужны до install_* ниже: они мигрируют vacancies при импорте
-init_db()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    init_vacancy_archive(connect_db)
-    init_candidate_workflow(connect_db)
+    open_pool()
+    with connect_db() as connection:
+        init_db(connection)
+        init_company_settings(connection)
     yield
+    close_pool()
 
 
 app = FastAPI(
@@ -138,15 +97,6 @@ class Application(ApplicationCreate):
     created_at: datetime
 
 
-def vacancy_from_row(row):
-    result = dict(row)
-    result["criteria"] = json.loads(result["criteria"])
-    result["preferred_criteria"] = json.loads(
-        result.get("preferred_criteria", "[]")
-    )
-    return result
-
-
 # Проверка работы сервера
 @app.get("/health")
 def health():
@@ -159,26 +109,25 @@ def health():
 # Создать вакансию
 @app.post("/vacancies", response_model=Vacancy, status_code=201)
 def create_vacancy(vacancy: VacancyCreate):
-    created_at = datetime.now(timezone.utc).isoformat()
+    created_at = datetime.now(timezone.utc)
 
-    with closing(connect_db()) as connection:
-        with connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO vacancies (
-                    title, direction, description, criteria, created_at
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    vacancy.title,
-                    vacancy.direction,
-                    vacancy.description,
-                    json.dumps(vacancy.criteria, ensure_ascii=False),
-                    created_at,
-                ),
+    with connect_db() as connection:
+        vacancy_id = connection.execute(
+            """
+            INSERT INTO vacancies (
+                title, direction, description, criteria, created_at
             )
-            vacancy_id = cursor.lastrowid
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                vacancy.title,
+                vacancy.direction,
+                vacancy.description,
+                Jsonb(vacancy.criteria),
+                created_at,
+            ),
+        ).fetchone()["id"]
 
     return {
         **vacancy.model_dump(),
@@ -190,24 +139,24 @@ def create_vacancy(vacancy: VacancyCreate):
 # Посмотреть вакансии
 @app.get("/vacancies", response_model=list[Vacancy])
 def list_vacancies(include_archived: bool = False):
-    with closing(connect_db()) as connection:
+    with connect_db() as connection:
         rows = connection.execute(
-            "SELECT * FROM vacancies WHERE (? OR vacancy_status='active') ORDER BY id DESC",
+            "SELECT * FROM vacancies WHERE (%s OR vacancy_status='active') ORDER BY id DESC",
             (include_archived,)
         ).fetchall()
 
-    return [vacancy_from_row(row) for row in rows]
+    return rows
 
 
 # Создать отклик
 @app.post("/applications", response_model=Application, status_code=201)
 def create_application(application: ApplicationCreate):
-    created_at = datetime.now(timezone.utc).isoformat()
+    created_at = datetime.now(timezone.utc)
 
-    with closing(connect_db()) as connection, connection:
-        connection.execute("BEGIN IMMEDIATE")
+    with connect_db() as connection:
+        # FOR SHARE: вакансию нельзя архивировать, пока отклик не сохранён.
         vacancy = connection.execute(
-            "SELECT id, vacancy_status FROM vacancies WHERE id = ?",
+            "SELECT id, vacancy_status FROM vacancies WHERE id = %s FOR SHARE",
             (application.vacancy_id,),
         ).fetchone()
 
@@ -220,13 +169,14 @@ def create_application(application: ApplicationCreate):
         if vacancy["vacancy_status"] != "active":
             raise HTTPException(status_code=409, detail="Вакансия закрыта. Выберите другую вакансию.")
 
-        cursor = connection.execute(
+        application_id = connection.execute(
             """
             INSERT INTO applications (
                 vacancy_id, name, contact, source,
                 resume_text, status, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (
                 application.vacancy_id,
@@ -237,8 +187,7 @@ def create_application(application: ApplicationCreate):
                 "new",
                 created_at,
             ),
-        )
-        application_id = cursor.lastrowid
+        ).fetchone()["id"]
 
     return {
         **application.model_dump(),
@@ -251,7 +200,7 @@ def create_application(application: ApplicationCreate):
 # Посмотреть все отклики или отклики на выбранную вакансию
 @app.get("/applications", response_model=list[Application])
 def list_applications(vacancy_id: int | None = None):
-    with closing(connect_db()) as connection:
+    with connect_db() as connection:
         if vacancy_id is None:
             rows = connection.execute(
                 "SELECT * FROM applications ORDER BY id DESC"
@@ -260,13 +209,13 @@ def list_applications(vacancy_id: int | None = None):
             rows = connection.execute(
                 """
                 SELECT * FROM applications
-                WHERE vacancy_id = ?
+                WHERE vacancy_id = %s
                 ORDER BY id DESC
                 """,
                 (vacancy_id,),
             ).fetchall()
 
-    return [dict(row) for row in rows]
+    return rows
 
 from job_descriptions import install_jd
 

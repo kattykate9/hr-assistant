@@ -2,10 +2,8 @@ from candidate_tasks import list_task_items, task_overview
 """Shared report data and paginated applications for the local HR workspace.
 No messages are sent. Reporting uses the configured local schedule and UTC queries.
 """
-from candidate_assessments import application_matches, match_summary
-import json
+from candidate_assessments import application_matches
 import unicodedata
-from contextlib import closing
 from datetime import datetime, time, timedelta, timezone
 from typing import Annotated, Literal
 from urllib.parse import urlencode
@@ -14,6 +12,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import AwareDatetime
 from candidate_workflow import ApplicationStatus
+from db import SNAPSHOT
 
 SOURCE_LABELS = {
     "hh": "hh.ru", "telegram": "Telegram", "linkedin": "LinkedIn",
@@ -27,7 +26,7 @@ def utc_now():
 
 def settings(connection):
     row = connection.execute("SELECT data FROM company_settings WHERE id=1").fetchone()
-    saved = json.loads(row["data"]) if row else {}
+    saved = row["data"] if row else {}
     return {
         "report_timezone": saved.get("report_timezone", "Asia/Nicosia"),
         "morning_report_time": saved.get("morning_report_time", "09:00"),
@@ -68,17 +67,17 @@ def build_report(connection, config, now=None, mode="latest", exclude_hh=False):
     now = now or utc_now()
     start, end, kind, next_at = report_window(config, now, mode)
     # Half-open intervals prevent counting boundary events in two reports.
-    where = "julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)"
+    where = "created_at >= %s AND created_at < %s"
     if exclude_hh:
         where += " AND source != 'hh'"
-    params = (start.isoformat(), end.isoformat())
+    params = (start, end)
     counts = {row["source"]: row["count"] for row in connection.execute(
         f"SELECT source, COUNT(*) AS count FROM applications WHERE {where} GROUP BY source", params
     )}
     received = sum(counts.values())
     new_count = connection.execute(
-        f"SELECT COUNT(*) FROM applications WHERE {where} AND status='new'", params
-    ).fetchone()[0]
+        f"SELECT COUNT(*) AS n FROM applications WHERE {where} AND status='new'", params
+    ).fetchone()["n"]
     by_vacancy = {str(row["vacancy_id"]): row["count"] for row in connection.execute(
         "SELECT vacancy_id, COUNT(*) AS count FROM applications "
         + ("WHERE source != 'hh' " if exclude_hh else "")
@@ -104,15 +103,15 @@ def install_recruitment_views(app, connect_db):
 
     @router.get("/report")
     def report(mode: Literal["latest", "current"] = "latest"):
-        with closing(connect_db()) as connection:
+        with connect_db() as connection:
             # A single read snapshot keeps totals and bars consistent.
-            connection.execute("BEGIN")
+            connection.execute(SNAPSHOT)
             return build_report(connection, settings(connection), mode=mode)
 
     @router.get("/telegram-report")
     def telegram_report():
-        with closing(connect_db()) as connection:
-            connection.execute("BEGIN")
+        with connect_db() as connection:
+            connection.execute(SNAPSHOT)
             data = build_report(connection, settings(connection), exclude_hh=False)
             tasks = task_overview(connection, exclude_hh=False, include_items=False)
         # Only aggregate fields; no resume, contacts, candidate or vacancy IDs.
@@ -139,66 +138,78 @@ def install_recruitment_views(app, connect_db):
     ):
         if created_from and created_before and created_from > created_before:
             raise HTTPException(422, "Начало периода должно быть не позже окончания.")
+        # Same folding as in SQL below: NFKC + lower().
         def fold(value):
-            return unicodedata.normalize("NFKC", value or "").casefold()
-        # Reuse the same scoring formula as the candidate card. No stored score to go stale.
-        def assessment_metric(criteria, answers, metric):
-            if criteria is None or answers is None:
-                return 0
-            return int(match_summary(json.loads(criteria), json.loads(answers), True)[metric])
-        evaluated = "assessment_metric(e.criteria_json, e.answers_json, 'has_assessment')"
-        percent = "assessment_metric(e.criteria_json, e.answers_json, 'percent')"
+            return unicodedata.normalize("NFKC", value or "").lower()
+        # Same scoring formula as match_summary() on the candidate card. No stored score to go stale.
+        evaluated = "m.evaluated"
+        percent = "m.percent"
         clauses, params = [], []
         if status:
-            clauses.append("a.status = ?"); params.append(status)
+            clauses.append("a.status = %s"); params.append(status)
         if vacancy_id is not None:
-            clauses.append("a.vacancy_id = ?"); params.append(vacancy_id)
+            clauses.append("a.vacancy_id = %s"); params.append(vacancy_id)
         if created_from:
-            clauses.append("julianday(a.created_at) >= julianday(?)"); params.append(created_from.isoformat())
+            clauses.append("a.created_at >= %s"); params.append(created_from)
         if created_before:
-            clauses.append("julianday(a.created_at) < julianday(?)"); params.append(created_before.isoformat())
+            clauses.append("a.created_at < %s"); params.append(created_before)
         if assessment != "all":
             clauses.append(evaluated + (" = 0" if assessment == "none" else " = 1"))
         # All words must be present; they may be in different fields. Symbols are literal.
         for word in dict.fromkeys(fold(q).split()):
-            clauses.append("instr(search_fold(COALESCE(a.name,'') || ' ' || COALESCE(a.contact,'') || ' ' || COALESCE(a.resume_text,'')), ?) > 0")
+            clauses.append("strpos(lower(normalize(COALESCE(a.name,'') || ' ' || COALESCE(a.contact,'') || ' ' || COALESCE(a.resume_text,''), NFKC)), %s) > 0")
             params.append(word)
-        joins = "FROM applications a LEFT JOIN vacancies v ON v.id=a.vacancy_id LEFT JOIN candidate_assessments e ON e.application_id=a.id"
+        joins = """FROM applications a LEFT JOIN vacancies v ON v.id=a.vacancy_id
+            LEFT JOIN candidate_assessments e ON e.application_id=a.id
+            CROSS JOIN LATERAL (
+                SELECT (s.reviewed > 0)::int AS evaluated,
+                       CASE WHEN s.total > 0 AND s.reviewed > 0
+                            THEN (100 * s.half_points + s.total) / (2 * s.total) ELSE 0 END AS percent
+                FROM (
+                    SELECT count(*) AS total,
+                           count(*) FILTER (WHERE r.rating <> 'not_reviewed') AS reviewed,
+                           COALESCE(sum(CASE r.rating WHEN 'confirmed' THEN 2 WHEN 'partial' THEN 1 ELSE 0 END), 0) AS half_points
+                    FROM jsonb_array_elements(e.criteria_json) AS item(criterion)
+                    CROSS JOIN LATERAL (
+                        SELECT COALESCE((
+                            SELECT answer->>'rating' FROM jsonb_array_elements(e.answers_json) AS x(answer)
+                            WHERE answer->>'key' = criterion->>'key' LIMIT 1
+                        ), 'not_reviewed') AS rating
+                    ) r
+                ) s
+            ) m"""
         ordering = {
-            "date_desc": "julianday(a.created_at) DESC, a.id DESC",
-            "date_asc": "julianday(a.created_at) ASC, a.id ASC",
-            "match_desc": evaluated + " DESC, " + percent + " DESC, julianday(a.created_at) DESC, a.id DESC",
-            "match_asc": evaluated + " DESC, " + percent + " ASC, julianday(a.created_at) DESC, a.id DESC",
+            "date_desc": "a.created_at DESC, a.id DESC",
+            "date_asc": "a.created_at ASC, a.id ASC",
+            "match_desc": evaluated + " DESC, " + percent + " DESC, a.created_at DESC, a.id DESC",
+            "match_asc": evaluated + " DESC, " + percent + " ASC, a.created_at DESC, a.id DESC",
         }[sort]
-        with closing(connect_db()) as connection:
-            connection.create_function("search_fold", 1, fold, deterministic=True)
-            connection.create_function("assessment_metric", 3, assessment_metric, deterministic=True)
-            connection.execute("BEGIN")
+        with connect_db() as connection:
+            connection.execute(SNAPSHOT)
             vacancy = None
             if vacancy_id is not None:
-                row = connection.execute("SELECT id, title FROM vacancies WHERE id = ?", (vacancy_id,)).fetchone()
-                if row is None:
+                vacancy = connection.execute("SELECT id, title FROM vacancies WHERE id = %s", (vacancy_id,)).fetchone()
+                if vacancy is None:
                     raise HTTPException(404, "Вакансия не найдена")
-                vacancy = dict(row)
             base_where = " AND ".join(clauses) or "1=1"
             counts = {row["source"]: row["count"] for row in connection.execute(
                 f"SELECT a.source, COUNT(*) AS count {joins} WHERE {base_where} GROUP BY a.source", params
             )}
             if source:
-                clauses.append("a.source = ?"); params.append(source)
+                clauses.append("a.source = %s"); params.append(source)
             where = " AND ".join(clauses) or "1=1"
-            total = connection.execute(f"SELECT COUNT(*) {joins} WHERE {where}", params).fetchone()[0]
+            total = connection.execute(f"SELECT COUNT(*) AS n {joins} WHERE {where}", params).fetchone()["n"]
             pages = max(1, (total + page_size - 1) // page_size)
             page = min(page, pages)
             rows = connection.execute(
-                f"SELECT a.*, v.title AS vacancy_title {joins} WHERE {where} ORDER BY {ordering} LIMIT ? OFFSET ?",
+                f"SELECT a.*, v.title AS vacancy_title {joins} WHERE {where} ORDER BY {ordering} LIMIT %s OFFSET %s",
                 [*params, page_size, (page-1)*page_size],
             ).fetchall()
             config = settings(connection)
             matches = application_matches(connection, rows)
             tasks = list_task_items(connection, rows)
         return {
-            "items": [{**dict(row), "match": matches[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
+            "items": [{**row, "match": matches[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
             "page_size": page_size, "pages": pages, "vacancy": vacancy,
             "sources": source_rows(counts), "timezone": config["report_timezone"],
             "query": q.strip(), "assessment": assessment, "sort": sort,
