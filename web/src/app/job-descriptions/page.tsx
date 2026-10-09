@@ -1,9 +1,11 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import JDForm, { type SaveResult, type DraftResult } from "./jd-form";
 
 export const dynamic = "force-dynamic";
 
 const API = "http://127.0.0.1:8000/job-descriptions";
+
+type LinkedVacancy = { id: number; title: string; source_jd_id?: number | null; source_jd_version?: number | null; vacancy_status: "active" | "archived" };
 
 type JD = {
   id: number;
@@ -12,6 +14,8 @@ type JD = {
   content: string;
   status: "draft" | "approved";
   version: number;
+  internal_notes?: string;
+  template_inputs?: string;
 };
 
 const directions: Record<string, string> = {
@@ -20,182 +24,34 @@ const directions: Record<string, string> = {
   roblox: "Roblox",
 };
 
-const template = `Цель роли:
-Зачем компании нужен этот сотрудник?
-
-Основные задачи:
-Какие задачи он будет выполнять?
-
-Ожидаемые результаты:
-Что должно быть сделано за первые 3 месяца?
-
-Обязательные требования:
-Без каких навыков невозможно выполнять работу?
-
-Желательные требования:
-Что будет преимуществом?
-
-Команда и подчинение:
-С кем работает сотрудник и кто его руководитель?
-
-Условия:
-Формат работы, график, часовой пояс, язык, бюджет.
-
-Вопросы для согласования:
-Какая информация пока не определена?`;
-
-async function saveJD(form: FormData) {
+async function saveJD(previous: SaveResult, form: FormData): Promise<SaveResult> {
   "use server";
-
-  const id = String(form.get("id") ?? "");
-  const intent = String(form.get("intent") ?? "save");
-
-  const payload = {
-    title: String(form.get("title") ?? "").trim(),
-    direction: String(form.get("direction") ?? ""),
-    content: String(form.get("content") ?? "").trim(),
-    ...(id
-      ? {
-          version: Number(form.get("version")),
-          approve: intent === "approve",
-        }
-      : {}),
-  };
-
-  const authorization = (await headers()).get("authorization") ?? "";
-  let result = "network";
-
-  try {
-    const response = await fetch(
-      id ? `${API}/${encodeURIComponent(id)}` : API,
-      {
-        method: id ? "PUT" : "POST",
-        headers: {
-          Authorization: authorization,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        cache: "no-store",
-        signal: AbortSignal.timeout(15000),
-      },
-    );
-
-    if (response.ok) {
-      result = intent === "approve" ? "approved" : "saved";
-    } else if (response.status === 409) {
-      result = "conflict";
-    } else if (response.status === 422) {
-      result = "validation";
-    } else {
-      result = "error";
-    }
-  } catch {
-    result = "network";
-  }
-
-  redirect(`/job-descriptions?result=${result}`);
+  const id=String(form.get("id")??"");
+  if(id&&!/^[1-9]\d*$/.test(id))return {error:"Некорректный ID."};
+  if(id&&form.get("approvalConfirmed")!=="yes")return {error:"Подтвердите проверку текста."};
+  let inputs;
+  try{inputs=JSON.parse(String(form.get("template_inputs")||"{}"));}catch{return {error:"Некорректный шаблон."};}
+  const approve=form.get("intent")==="approve";
+  try{
+    const response=await fetch(id?`${API}/${id}`:API,{
+      method:id?"PUT":"POST",headers:{Authorization:(await headers()).get("authorization")??"","Content-Type":"application/json"},
+      body:JSON.stringify({title:String(form.get("title")??"").trim(),direction:String(form.get("direction")??""),
+        content:String(form.get("content")??"").trim(),internal_notes:String(form.get("internal_notes")??""),template_inputs:inputs,
+        ...(id?{version:Number(form.get("version")),approve}: {})}),cache:"no-store",signal:AbortSignal.timeout(15000)});
+    if(response.ok)return {error:"",saved:true,approved:!!id&&approve};
+    const messages:Record<number,string>={401:"Войдите в кабинет заново.",403:"Нет доступа.",404:"JD не найден.",409:"JD уже изменён или утверждён. Скопируйте свои правки и обновите страницу.",422:"Проверьте длину и заполнение полей."};
+    return {error:messages[response.status]||"Не удалось сохранить JD. Введённый текст остался в форме."};
+  }catch{return {error:"Нет подтверждения сохранения. Перед повторной отправкой проверьте список JD в другой вкладке: документ мог сохраниться. Текст остался в форме."};}
 }
-
-const field =
-  "mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900";
-const button =
-  "rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white hover:bg-indigo-700";
-
-function JDForm({ jd }: { jd?: JD }) {
-  return (
-    <form action={saveJD} className="space-y-5">
-      {jd && (
-        <>
-          <input type="hidden" name="id" value={jd.id} />
-          <input type="hidden" name="version" value={jd.version} />
-        </>
-      )}
-
-      <label className="block text-sm font-medium">
-        Название роли
-        <input
-          name="title"
-          required
-          maxLength={200}
-          defaultValue={jd?.title ?? ""}
-          placeholder="Например, Roblox Developer"
-          className={field}
-        />
-      </label>
-
-      <label className="block text-sm font-medium">
-        Направление
-        <select
-          name="direction"
-          defaultValue={jd?.direction ?? "roblox"}
-          className={field}
-        >
-          {Object.entries(directions).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block text-sm font-medium">
-        Внутренний Job Description
-        <textarea
-          name="content"
-          required
-          minLength={20}
-          maxLength={30000}
-          rows={16}
-          defaultValue={jd?.content ?? ""}
-          placeholder={template}
-          className={`${field} leading-6`}
-        />
-      </label>
-
-      <p className="text-xs leading-5 text-slate-500">
-        Можно вставить готовый JD или написать его по подсказкам.
-        Неизвестные условия отмечайте как «требует уточнения».
-        Это внутренний документ, он не отправляется кандидатам.
-      </p>
-
-      {jd && (
-        <label className="flex items-start gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            name="approvalConfirmed"
-            value="yes"
-            className="mt-1"
-            required
-          />
-          Я проверила текст. Для сохранения или утверждения подтверждаю,
-          что внесённые изменения намеренные.
-        </label>
-      )}
-
-      <div className="flex flex-wrap gap-3">
-        <button type="submit" name="intent" value="save" className={button}>
-          {jd ? "Сохранить изменения" : "Создать черновик"}
-        </button>
-
-        {jd && (
-          <button
-            type="submit"
-            name="intent"
-            value="approve"
-            className="rounded-xl border border-indigo-300 px-5 py-3 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
-          >
-            Сохранить и утвердить JD
-          </button>
-        )}
-      </div>
-
-      {jd && (
-        <p className="text-xs text-slate-500">
-          После утверждения редактирование этой версии будет закрыто.
-        </p>
-      )}
-    </form>
-  );
+async function prepareJD(payload: unknown): Promise<DraftResult> {
+  "use server";
+  try{
+    const response=await fetch(`${API}/ai-draft`,{method:"POST",headers:{Authorization:(await headers()).get("authorization")??"","Content-Type":"application/json"},body:JSON.stringify(payload),cache:"no-store",signal:AbortSignal.timeout(90000)});
+    const data=await response.json().catch(()=>null);
+    if(!response.ok)return {error:typeof data?.detail==="string"?data.detail:"Не удалось подготовить JD. Проверьте заполнение полей и вход в кабинет."};
+    if(typeof data?.content!=="string"||!Array.isArray(data.questions)||data.questions.some((q:unknown)=>typeof q!=="string"))return {error:"Некорректный ответ. Текст не изменён."};
+    return {error:"",content:data.content,questions:data.questions};
+  }catch{return {error:"Ответ ИИ не получен. Поля не изменены. Автоматического повтора нет; повторный запрос может оплачиваться отдельно."};}
 }
 
 export default async function JDPage({
@@ -206,6 +62,17 @@ export default async function JDPage({
   const { result } = await searchParams;
   let items: JD[] = [];
   let failed = false;
+  let vacancies: LinkedVacancy[] | null = null;
+  try {
+    const response = await fetch("http://127.0.0.1:8000/vacancies?include_archived=true", {
+      headers: { Authorization: (await headers()).get("authorization") ?? "" },
+      cache: "no-store", signal: AbortSignal.timeout(10000),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.every(v => Number.isInteger(v.id) && typeof v.title === "string" && ["active", "archived"].includes(v.vacancy_status))) vacancies = data;
+    }
+  } catch { vacancies = null; }
 
   try {
     const response = await fetch(API, {
@@ -273,7 +140,7 @@ export default async function JDPage({
                 + Создать Job Description
               </summary>
               <div className="mt-6">
-                <JDForm />
+                <JDForm save={saveJD} prepare={prepareJD} />
               </div>
             </details>
 
@@ -303,7 +170,7 @@ export default async function JDPage({
 
                   <div className="mt-6">
                     {jd.status === "draft" ? (
-                      <JDForm jd={jd} />
+                      <JDForm jd={jd} save={saveJD} prepare={prepareJD} />
                     ) : (
                       <>
                         <p className="text-sm text-indigo-600">
@@ -312,10 +179,17 @@ export default async function JDPage({
                         <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-7">
                           {jd.content}
                         </p>
+                        {jd.internal_notes && <details className="mt-4 rounded-xl bg-amber-50 p-4"><summary className="cursor-pointer font-medium">Внутренние комментарии</summary><p className="mt-3 whitespace-pre-wrap text-sm">{jd.internal_notes}</p></details>}
                         <p className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                          <a href={`/job-descriptions/${jd.id}/vacancy`} className="font-medium text-indigo-600">
-                            Создать вакансию на основе JD →
-                          </a>
+                          {vacancies === null ? (
+                            <span>Не удалось проверить связанную вакансию. Обновите страницу.</span>
+                          ) : (() => {
+                            const linked = vacancies.find(v => v.source_jd_id === jd.id && v.source_jd_version === jd.version);
+                            return linked ? <>
+                              <span className="mb-2 block font-medium text-slate-700">{linked.vacancy_status === "archived" ? "Вакансия в архиве" : "Вакансия создана"}</span>
+                              <a href={`/vacancies/${linked.id}`} className="font-medium text-indigo-600">Открыть вакансию {linked.title} →</a>
+                            </> : <a href={`/job-descriptions/${jd.id}/vacancy`} className="font-medium text-indigo-600">Создать вакансию на основе JD →</a>;
+                          })()}
                         </p>
                       </>
                     )}

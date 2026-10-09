@@ -1,3 +1,5 @@
+import json
+from ai_jd import JDInputs, generate_jd_draft
 from contextlib import closing
 from datetime import datetime, timezone
 from typing import Literal
@@ -15,11 +17,21 @@ class JDCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     direction: Literal["traffic", "development", "roblox"]
     content: str = Field(min_length=20, max_length=30000)
+    internal_notes: str | None = Field(default=None, max_length=10000)
+    template_inputs: JDInputs | None = None
 
 
 class JDUpdate(JDCreate):
     version: int = Field(ge=1)
     approve: bool = False
+
+
+class JDDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(min_length=1,max_length=200)
+    direction: Literal["traffic", "development", "roblox"]
+    inputs: JDInputs
+    share_with_openai: bool = False
 
 
 def install_jd(app, connect_db):
@@ -41,6 +53,17 @@ def install_jd(app, connect_db):
                 )
             """)
 
+    # Additive migration: legacy JD text, statuses and versions stay intact.
+            columns={row[1] for row in connection.execute("PRAGMA table_info(job_descriptions)")}
+            if "internal_notes" not in columns:
+                connection.execute("ALTER TABLE job_descriptions ADD COLUMN internal_notes TEXT NOT NULL DEFAULT ''")
+            if "template_inputs" not in columns:
+                connection.execute("ALTER TABLE job_descriptions ADD COLUMN template_inputs TEXT NOT NULL DEFAULT '{}'")
+
+    @router.post("/ai-draft")
+    def prepare_jd(data: JDDraftRequest):
+        return generate_jd_draft(data)
+
     @router.get("")
     def list_jds():
         with closing(connect_db()) as connection:
@@ -58,11 +81,11 @@ def install_jd(app, connect_db):
                 cursor = connection.execute(
                     """
                     INSERT INTO job_descriptions (
-                        title, direction, content, created_at, updated_at
+                        title, direction, content, created_at, updated_at, internal_notes, template_inputs
                     )
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (data.title, data.direction, data.content, now, now),
+                    (data.title, data.direction, data.content, now, now, data.internal_notes or "", json.dumps(data.template_inputs.model_dump() if data.template_inputs else {}, ensure_ascii=False)),
                 )
                 row = connection.execute(
                     "SELECT * FROM job_descriptions WHERE id = ?",
@@ -83,7 +106,7 @@ def install_jd(app, connect_db):
                     UPDATE job_descriptions
                     SET title = ?, direction = ?, content = ?,
                         status = ?, version = version + 1,
-                        updated_at = ?, approved_at = ?
+                        updated_at = ?, approved_at = ?, internal_notes = COALESCE(?, internal_notes), template_inputs = COALESCE(?, template_inputs)
                     WHERE id = ? AND version = ? AND status = 'draft'
                     """,
                     (
@@ -93,6 +116,8 @@ def install_jd(app, connect_db):
                         status,
                         now,
                         now if data.approve else None,
+                        data.internal_notes,
+                        json.dumps(data.template_inputs.model_dump(), ensure_ascii=False) if data.template_inputs is not None else None,
                         jd_id,
                         data.version,
                     ),
