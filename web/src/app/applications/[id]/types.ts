@@ -1,6 +1,8 @@
+import type { AIState } from "./ai-types";
 import type { TaskState } from "./task-types";
 import type { Assessment } from "./assessment-types";
 export type ApplicationCard = {
+  ai_assessment: AIState;
   reply_tracking: {needs_reply:boolean;version:number;updated_at:string|null};
   application: { id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string; review_version: number };
   events: { id: number; event_type: "stage" | "note"; old_status: string | null; new_status: string | null; note: string | null; created_at: string }[];

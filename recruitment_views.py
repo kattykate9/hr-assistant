@@ -1,3 +1,4 @@
+from candidate_ai import ai_summary
 from candidate_export import ExportRequest, export_csv
 from fastapi import Header
 from candidate_tasks import list_task_items, task_overview
@@ -244,8 +245,9 @@ def install_recruitment_views(app, connect_db):
             if export_request is not None:
                 return export_csv(connection, rows, matches, export_request)
             tasks = list_task_items(connection, rows)
+            ai_matches = {row["id"]: ai_summary(connection, row["id"]) for row in rows}
         return {
-            "items": [{**dict(row), "match": matches[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
+            "items": [{**dict(row), "ai_match": ai_matches[row["id"]], "match": matches[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
             "page_size": page_size, "pages": pages, "vacancy": vacancy,
             "sources": source_rows(counts), "timezone": config["report_timezone"],
             "query": q.strip(), "assessment": assessment, "sort": sort,

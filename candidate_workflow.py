@@ -1,3 +1,4 @@
+from candidate_ai import init_ai, read_ai, install_ai
 from candidate_messages import init_messages, install_messages
 from reply_tracking import init_reply, read_reply, install_reply
 """Local recruiter workflow; decisions are made by the recruiter."""
@@ -50,6 +51,7 @@ def init_candidate_workflow(connect_db):
     init_tasks(connect_db)
     init_reply(connect_db)
     init_messages(connect_db)
+    init_ai(connect_db)
 
 
 def stage_history(c, application):
@@ -74,7 +76,7 @@ def read_card(c, application_id):
     from recruitment_views import settings
     events = c.execute('SELECT * FROM application_events WHERE application_id=? ORDER BY id DESC LIMIT 100', (application_id,)).fetchall()
     total = c.execute('SELECT COUNT(*) FROM application_events WHERE application_id=?', (application_id,)).fetchone()[0]
-    return {'reply_tracking':read_reply(c,application_id),'application': dict(row), 'events': [dict(e) for e in events],
+    return {'ai_assessment':read_ai(c,application_id),'reply_tracking':read_reply(c,application_id),'application': dict(row), 'events': [dict(e) for e in events],
             'next_action': read_task(c, application_id), 'assessment': read_assessment(c, application_id), 'events_total': total, 'stage_history': stage_history(c, row), 'timezone': settings(c)['report_timezone'], 'stages': STAGES}
 
 
@@ -133,5 +135,6 @@ def install_candidate_workflow(app, connect_db):
     app.include_router(router)
     install_reply(app,connect_db)
     install_messages(app,connect_db)
+    install_ai(app,connect_db)
     install_assessments(app, connect_db)
     install_tasks(app, connect_db)
