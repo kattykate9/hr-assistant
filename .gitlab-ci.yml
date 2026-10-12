@@ -123,9 +123,10 @@ build-deploy-production:
   extends: [.build_deploy_template]
   environment:
     name: production
-    url: https://hr.baklajan.io
+    url: https://hh.baklajan.io
   variables:
     BACK_PUBLISHED_PORT: "18084"
+    WEB_PUBLISHED_PORT: "13084"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
 
@@ -133,8 +134,9 @@ build-deploy-staging:
   extends: [.build_deploy_template]
   environment:
     name: staging
-    url: https://hr-staging.baklajan.io
+    url: https://hh-staging.baklajan.io
   variables:
     BACK_PUBLISHED_PORT: "8084"
+    WEB_PUBLISHED_PORT: "3084"
   rules:
     - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE != "merge_request_event"'
