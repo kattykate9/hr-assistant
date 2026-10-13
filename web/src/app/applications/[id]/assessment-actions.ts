@@ -1,13 +1,10 @@
 "use server";
-import { headers } from "next/headers";
 import type { Assessment, Answer } from "./assessment-types";
 export async function saveAssessment(id: number, payload: { version: number; criteria_token: string; answers: Answer[] }): Promise<{ data?: Assessment; error?: string }> {
   if (!Number.isSafeInteger(id) || id <= 0) return { error: "Некорректный отклик." };
-  const authorization = (await headers()).get("authorization");
-  if (!authorization) return { error: "Войдите в кабинет заново. Черновик остаётся в форме." };
   try {
     const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}/assessment`, {
-      method: "PUT", headers: { Authorization: authorization, "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
+      method: "PUT", headers: { "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
       body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(15000),
     });
     if (response.ok) return { data: await response.json() };

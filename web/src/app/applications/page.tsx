@@ -1,6 +1,5 @@
 import type { CandidateTask } from "./[id]/task-types";
 import MatchBadge, { type MatchSummary } from "./match-badge";
-import { headers } from "next/headers";
 import { reportDate } from "../report-panel";
 export const dynamic = "force-dynamic";
 type Applicant = { next_action: CandidateTask | null; match: MatchSummary; id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string };
@@ -35,10 +34,9 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   let vacancies: Vacancy[] = [];
   let vacanciesError = false;
   let error = "";
-  const requestHeaders = { Authorization: (await headers()).get("authorization") ?? "" };
   const results = await Promise.allSettled([
-    fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications?${filters}`, { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
-    fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/vacancies?include_archived=true`, { headers: requestHeaders, cache: "no-store", signal: AbortSignal.timeout(10000) }),
+    fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications?${filters}`, { cache: "no-store", signal: AbortSignal.timeout(10000) }),
+    fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/vacancies?include_archived=true`, { cache: "no-store", signal: AbortSignal.timeout(10000) }),
   ]);
   if (results[0].status === "fulfilled") {
     const response = results[0].value;

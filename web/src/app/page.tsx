@@ -1,5 +1,4 @@
 import TaskDashboard from "./task-dashboard";
-import { headers } from "next/headers";
 import ReportPanel, { type RecruitmentReport } from "./report-panel";
 import VacancyList, { type Vacancy } from "./vacancy-list";
 
@@ -8,7 +7,7 @@ export const dynamic = "force-dynamic";
 async function load<T>(path: string): Promise<T | null> {
   try {
     const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}${path}`, {
-      headers: { Authorization: (await headers()).get("authorization") ?? "" },
+      
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) return null;

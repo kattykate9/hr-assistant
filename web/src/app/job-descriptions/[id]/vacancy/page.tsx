@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import VacancyForm, { type DraftResult, type CompanyProfile } from "./vacancy-form";
 
 export const dynamic = "force-dynamic";
@@ -84,7 +83,6 @@ async function saveVacancy(
       {
         method: "POST",
         headers: {
-          Authorization: (await headers()).get("authorization") ?? "",
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
@@ -133,7 +131,6 @@ async function prepareVacancy(
       {
         method: "POST",
         headers: {
-          Authorization: (await headers()).get("authorization") ?? "",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ jd_version: jdVersion, share_with_openai: true, language }),
@@ -169,7 +166,7 @@ export default async function CreateVacancyPage({
   let company: CompanyProfile | null = null;
   try {
     const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
-      headers: { Authorization: (await headers()).get("authorization") ?? "" },
+      
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
     if (response.ok) {
@@ -187,7 +184,6 @@ export default async function CreateVacancyPage({
         `${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/job-descriptions/${id}`,
         {
           headers: {
-            Authorization: (await headers()).get("authorization") ?? "",
           },
           cache: "no-store",
           signal: AbortSignal.timeout(10000),

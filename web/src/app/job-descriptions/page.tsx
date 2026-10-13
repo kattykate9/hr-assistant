@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +61,6 @@ async function saveJD(form: FormData) {
       : {}),
   };
 
-  const authorization = (await headers()).get("authorization") ?? "";
   let result = "network";
 
   try {
@@ -71,7 +69,6 @@ async function saveJD(form: FormData) {
       {
         method: id ? "PUT" : "POST",
         headers: {
-          Authorization: authorization,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
@@ -210,7 +207,6 @@ export default async function JDPage({
   try {
     const response = await fetch(API, {
       headers: {
-        Authorization: (await headers()).get("authorization") ?? "",
       },
       cache: "no-store",
       signal: AbortSignal.timeout(10000),

@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import CandidateCard from "./candidate-card";
 import type { ApplicationCard } from "./types";
 export const dynamic = "force-dynamic";
@@ -14,7 +13,7 @@ export default async function CandidatePage({ params, searchParams }: { params: 
   else {
     try {
       const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}`, {
-        headers: { Authorization: (await headers()).get("authorization") ?? "" }, cache: "no-store", signal: AbortSignal.timeout(10000),
+        cache: "no-store", signal: AbortSignal.timeout(10000),
       });
       if (response.ok) data = await response.json();
       else error = response.status === 404 ? "Отклик не найден." : response.status === 401 ? "Нужно снова войти в кабинет." : "Не удалось загрузить карточку.";

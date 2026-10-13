@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import SettingsForm, { type Settings, type SaveResult } from "./settings-form";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +23,7 @@ async function saveSettings(previous: SaveResult, form: FormData): Promise<SaveR
   try {
     const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
       method: "PUT",
-      headers: { Authorization: (await headers()).get("authorization") ?? "", "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(10000),
     });
     const data = await response.json().catch(() => null);
@@ -52,7 +51,7 @@ export default async function SettingsPage() {
   let settings: Settings | null = null;
   try {
     const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
-      headers: { Authorization: (await headers()).get("authorization") ?? "" },
+      
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
     if (response.ok) settings = await response.json();

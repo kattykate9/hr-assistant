@@ -1,17 +1,14 @@
 "use server";
-import { headers } from "next/headers";
 import type { SaveResult } from "./types";
 
 export async function saveCandidate(applicationId: number, kind: "stage" | "note", payload: { version: number; status?: string; text?: string; request_id?: string }): Promise<SaveResult> {
   if (!Number.isSafeInteger(applicationId) || applicationId <= 0 || !Number.isSafeInteger(payload.version) || payload.version < 1 || !["stage", "note"].includes(kind)) return { error: "Некорректный запрос. Обновите карточку." };
   if (kind === "note" && (!payload.text?.trim() || payload.text.length > 5000 || !payload.request_id)) return { error: "Введите заметку от 1 до 5000 символов." };
-  const authorization = (await headers()).get("authorization");
-  if (!authorization) return { error: "Нужно снова войти в кабинет." };
   const body = kind === "stage" ? { version: payload.version, status: payload.status } : { version: payload.version, text: payload.text, request_id: payload.request_id };
   try {
     const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${applicationId}/${kind === "stage" ? "stage" : "notes"}`, {
       method: kind === "stage" ? "PATCH" : "POST",
-      headers: { Authorization: authorization, "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
+      headers: { "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
       body: JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(15000),
     });
     if (!response.ok) {
