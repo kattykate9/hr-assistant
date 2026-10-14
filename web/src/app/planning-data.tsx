@@ -1,8 +1,9 @@
+import { apiFetch } from "@/lib/api";
 import type { CandidateTask } from "./applications/[id]/task-types";
 export type PlanningItem = CandidateTask & { name: string; vacancy_title: string | null; source: string };
 export type PlanningData = { items: PlanningItem[]; counts: Record<string, number>; total: number; page: number; pages: number; timezone: string; generated_at: string; status: string };
 export async function loadPlanning(query: URLSearchParams): Promise<PlanningData | null> {
-  try { const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/tasks/list?${query}`, { cache: "no-store", signal: AbortSignal.timeout(10000) }); if (response.ok) return await response.json(); } catch {}
+  try { const response = await apiFetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/tasks/list?${query}`, { cache: "no-store", signal: AbortSignal.timeout(10000) }); if (response.ok) return await response.json(); } catch {}
   return null;
 }
 export function taskDate(value: string, timezone: string) { return new Intl.DateTimeFormat("ru-RU", { timeZone: timezone, dateStyle: "short", timeStyle: "short" }).format(new Date(value)); }

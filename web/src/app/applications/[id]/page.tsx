@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import CandidateCard from "./candidate-card";
 import type { ApplicationCard } from "./types";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default async function CandidatePage({ params, searchParams }: { params: 
   if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) error = "Некорректный адрес карточки.";
   else {
     try {
-      const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}`, {
+      const response = await apiFetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}`, {
         cache: "no-store", signal: AbortSignal.timeout(10000),
       });
       if (response.ok) data = await response.json();

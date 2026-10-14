@@ -1,9 +1,10 @@
 "use server";
+import { apiFetch } from "@/lib/api";
 import type { Assessment, Answer } from "./assessment-types";
 export async function saveAssessment(id: number, payload: { version: number; criteria_token: string; answers: Answer[] }): Promise<{ data?: Assessment; error?: string }> {
   if (!Number.isSafeInteger(id) || id <= 0) return { error: "Некорректный отклик." };
   try {
-    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}/assessment`, {
+    const response = await apiFetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}/assessment`, {
       method: "PUT", headers: { "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
       body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(15000),
     });

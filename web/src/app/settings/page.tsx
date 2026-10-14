@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import SettingsForm, { type Settings, type SaveResult } from "./settings-form";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ async function saveSettings(previous: SaveResult, form: FormData): Promise<SaveR
     return { error: "Не удалось определить версию настроек. Обновите страницу.", version };
   }
   try {
-    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
+    const response = await apiFetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(10000),
@@ -50,7 +51,7 @@ async function saveSettings(previous: SaveResult, form: FormData): Promise<SaveR
 export default async function SettingsPage() {
   let settings: Settings | null = null;
   try {
-    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
+    const response = await apiFetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/settings/company`, {
       
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });

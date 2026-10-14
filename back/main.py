@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
     open_pool()
     with connect_db() as connection:
         init_db(connection)
+        from auth_accounts import init_auth
+        init_auth(connection)
         init_company_settings(connection)
     yield
     close_pool()

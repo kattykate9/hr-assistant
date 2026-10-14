@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import TaskDashboard from "./task-dashboard";
 import ReportPanel, { type RecruitmentReport } from "./report-panel";
 import VacancyList, { type Vacancy } from "./vacancy-list";
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 async function load<T>(path: string): Promise<T | null> {
   try {
-    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}${path}`, {
+    const response = await apiFetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}${path}`, {
       
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
@@ -51,7 +52,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           </nav>
 
           <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-            Локальный прототип
+            Кабинет команды
           </span>
         </div>
       </header>
@@ -100,7 +101,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         </section>
 
         <footer className="border-t border-slate-200 pt-6 text-xs text-slate-500">
-          Локальная версия. Доступ по учётной записи администратора.
+          Доступ для сотрудников вашей команды.
         </footer>
       </main>
     </div>

@@ -1,9 +1,10 @@
 "use server";
+import { apiFetch } from "@/lib/api";
 import type { TaskPayload, TaskState } from "./task-types";
 export async function saveTask(id: number, kind: "save" | "complete", payload: TaskPayload): Promise<{ data?: TaskState; error?: string }> {
   if (!Number.isSafeInteger(id) || id <= 0 || !["save", "complete"].includes(kind)) return { error: "Некорректный запрос." };
   try {
-    const response = await fetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}/task${kind === "complete" ? "/complete" : ""}`, {
+    const response = await apiFetch(`${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/recruiting/applications/${id}/task${kind === "complete" ? "/complete" : ""}`, {
       method: kind === "complete" ? "POST" : "PUT", headers: { "Content-Type": "application/json", "X-HR-Action": "candidate-workflow" },
       body: JSON.stringify(kind === "complete" ? { version: payload.version } : payload), cache: "no-store", signal: AbortSignal.timeout(15000),
     });
