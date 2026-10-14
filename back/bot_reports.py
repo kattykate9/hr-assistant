@@ -69,7 +69,7 @@ def report_text(report, base):
              f'Часовой пояс: {zone.key}', '', 'Все источники, включая hh.ru.',
              f"Получено откликов: {report['received']}",
              f"Из них сейчас в статусе «новый»: {report['new_in_period']}",
-             'AI-обработка и первичная AI-оценка не подключены.', '', 'Источники:']
+             'AI-анализ запускается вручную в карточке кандидата; его результаты в эту сводку пока не включены.', '', 'Источники:']
     labels = {'hh': 'hh.ru', 'telegram': 'Telegram', 'manual': 'Вручную', 'website': 'Сайт', 'linkedin': 'LinkedIn', 'djinni': 'Djinni'}
     other = 0
     for row in report['sources']:

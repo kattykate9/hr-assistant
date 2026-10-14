@@ -1,3 +1,4 @@
+import type { AIState } from "./ai-types";
 import type { TaskState } from "./task-types";
 import type { Assessment } from "./assessment-types";
 export type ApplicationCard = {
@@ -6,6 +7,7 @@ export type ApplicationCard = {
   stage_history: { id: number; status: string; started_at: string; notes: { id: number; text: string; created_at: string }[] }[];
   next_action: TaskState;
   assessment: Assessment;
+  ai_assessment: AIState;
   events_total: number;
   timezone: string;
   stages: Record<string, string>;

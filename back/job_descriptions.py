@@ -1,3 +1,5 @@
+from ai_jd import JDInputs, generate_jd_draft
+from psycopg.types.json import Jsonb
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -14,6 +16,8 @@ class JDCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     direction: Literal["traffic", "development", "roblox"]
     content: str = Field(min_length=20, max_length=30000)
+    internal_notes: str | None = Field(default=None, max_length=10000)
+    template_inputs: JDInputs | None = None
 
 
 class JDUpdate(JDCreate):
@@ -21,8 +25,20 @@ class JDUpdate(JDCreate):
     approve: bool = False
 
 
+class JDDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(min_length=1, max_length=200)
+    direction: Literal["traffic", "development", "roblox"]
+    inputs: JDInputs
+    share_with_openai: bool = False
+
+
 def install_jd(app, connect_db):
     router = APIRouter(prefix="/job-descriptions", tags=["Job Description"])
+
+    @router.post("/ai-draft")
+    def prepare_jd(data: JDDraftRequest):
+        return generate_jd_draft(data)
 
     @router.get("")
     def list_jds():
@@ -39,12 +55,13 @@ def install_jd(app, connect_db):
             return connection.execute(
                 """
                 INSERT INTO job_descriptions (
-                    title, direction, content, created_at, updated_at
+                    title, direction, content, created_at, updated_at, internal_notes, template_inputs
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
-                (data.title, data.direction, data.content, now, now),
+                (data.title, data.direction, data.content, now, now, data.internal_notes or "",
+                 Jsonb(data.template_inputs.model_dump() if data.template_inputs else {})),
             ).fetchone()
 
     @router.put("/{jd_id}")
@@ -58,7 +75,9 @@ def install_jd(app, connect_db):
                 UPDATE job_descriptions
                 SET title = %s, direction = %s, content = %s,
                     status = %s, version = version + 1,
-                    updated_at = %s, approved_at = %s
+                    updated_at = %s, approved_at = %s,
+                    internal_notes = COALESCE(%s, internal_notes),
+                    template_inputs = COALESCE(%s, template_inputs)
                 WHERE id = %s AND version = %s AND status = 'draft'
                 RETURNING *
                 """,
@@ -69,6 +88,8 @@ def install_jd(app, connect_db):
                     status,
                     now,
                     now if data.approve else None,
+                    data.internal_notes,
+                    Jsonb(data.template_inputs.model_dump()) if data.template_inputs is not None else None,
                     jd_id,
                     data.version,
                 ),

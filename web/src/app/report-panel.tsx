@@ -41,8 +41,8 @@ export default function ReportPanel({ report, mode }: { report: RecruitmentRepor
           {[
             { label: "Поступило откликов", value: String(report.received), note: "За выбранный период" },
             { label: "Ожидают обработки", value: String(report.new_in_period), note: "Из поступивших за период · статус «Новый»" },
-            { label: "Обработано ИИ", value: report.ai_processed === null ? "—" : String(report.ai_processed), note: "AI-оценка кандидатов ещё не подключена" },
-            { label: "Первичная оценка", value: report.ai_assessment ?? "—", note: "Появится после подключения AI-оценки" },
+            { label: "Обработано ИИ", value: report.ai_processed === null ? "—" : String(report.ai_processed), note: "AI-анализ доступен в карточке; статистика пока не включена в отчёт" },
+            { label: "Первичная оценка", value: report.ai_assessment ?? "—", note: "Результаты доступны в карточках кандидатов" },
           ].map((item) => <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5">
             <p className="text-sm text-slate-500">{item.label}</p><p className="mt-3 text-3xl font-semibold">{item.value}</p><p className="mt-2 text-xs leading-5 text-slate-500">{item.note}</p>
           </div>)}

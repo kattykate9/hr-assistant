@@ -145,6 +145,23 @@ CREATE TABLE IF NOT EXISTS report_delivery (
     updated_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (recipient, period)
 );
+
+-- Additive migration for JD templates and recruiter-triggered AI review.
+ALTER TABLE job_descriptions ADD COLUMN IF NOT EXISTS internal_notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE job_descriptions ADD COLUMN IF NOT EXISTS template_inputs JSONB NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS candidate_ai_runs (
+    request_id TEXT PRIMARY KEY,
+    application_id BIGINT NOT NULL REFERENCES applications(id),
+    fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('running','completed','failed','unknown')),
+    started DOUBLE PRECISION NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    model TEXT NOT NULL,
+    result_json JSONB,
+    detail TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS candidate_ai_app ON candidate_ai_runs(application_id,started);
+CREATE UNIQUE INDEX IF NOT EXISTS candidate_ai_running ON candidate_ai_runs(application_id) WHERE status='running';
 """
 
 # Произвольный ключ: api и bot могут стартовать одновременно.

@@ -1,9 +1,10 @@
+import AIBadge, { type AISummary } from "./ai-badge";
 import { apiFetch } from "@/lib/api";
 import type { CandidateTask } from "./[id]/task-types";
 import MatchBadge, { type MatchSummary } from "./match-badge";
 import { reportDate } from "../report-panel";
 export const dynamic = "force-dynamic";
-type Applicant = { next_action: CandidateTask | null; match: MatchSummary; id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string };
+type Applicant = { ai_match: AISummary; next_action: CandidateTask | null; match: MatchSummary; id: number; name: string; contact: string; resume_text: string; source: string; status: string; vacancy_id: number; vacancy_title: string | null; created_at: string };
 type Data = {
   items: Applicant[]; total: number; page: number; pages: number; timezone: string;
   vacancy: { id: number; title: string } | null;
@@ -79,11 +80,11 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
             <label className="text-sm font-medium">Сортировка
               <select name="sort" defaultValue={get("sort") || "date_desc"} className={field}>
                 <option value="date_desc">Сначала новые</option><option value="date_asc">Сначала старые</option>
-                <option value="match_desc">Оценка по критериям вакансии: от большей к меньшей</option><option value="match_asc">Оценка по критериям вакансии: от меньшей к большей</option>
+                <option value="match_desc">Ручная оценка по критериям вакансии: от большей к меньшей</option><option value="match_asc">Ручная оценка по критериям вакансии: от меньшей к большей</option>
               </select>
             </label>
           </div>
-          <p className="text-xs text-slate-500">Поиск без учёта регистра: должны встретиться все введённые слова. При сортировке по оценке критериев вакансии отклики без оценки идут в конце.</p>
+          <p className="text-xs text-slate-500">Поиск без учёта регистра: должны встретиться все введённые слова. Сортировка использует ручную оценку по критериям вакансии; отклики без ручной оценки идут в конце. AI-оценка показана отдельно.</p>
           <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
             <label className="text-sm font-medium">Источник
               <select name="source" defaultValue={get("source")} className={field}>
@@ -124,7 +125,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
           <p className="text-sm text-slate-500">Найдено: <strong className="text-slate-900">{data.total}</strong>{get("source") ? ` · ${sourceLabel(get("source"))}` : ""}</p>
           {data.items.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center"><h2 className="font-semibold">Откликов по выбранным условиям пока нет</h2><p className="mt-2 text-sm text-slate-500">Измените поисковый запрос или фильтры.</p></div> : <div className="space-y-3">
             {data.items.map((application) => <a key={application.id} href={`/applications/${application.id}?back=${encodeURIComponent(`/applications?${filters}`)}`} className="block rounded-2xl border border-slate-200 bg-white px-5 py-4 transition hover:border-indigo-300 hover:bg-indigo-50/30 focus-visible:outline-2 focus-visible:outline-indigo-600">
-              <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-semibold text-indigo-700">{application.name}</span><span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}><MatchBadge value={application.match} /><span style={stageStyle(application.status)}>{stages[application.status] ?? application.status}</span></span></div>
+              <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-semibold text-indigo-700">{application.name}</span><span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}><span className="text-xs text-slate-500">Ручная:</span><MatchBadge value={application.match} /><AIBadge value={application.ai_match} /><span style={stageStyle(application.status)}>{stages[application.status] ?? application.status}</span></span></div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{application.vacancy_title ?? "Вакансия недоступна"}</span><span>{sourceLabel(application.source)}</span><span>{dateLabel(application.created_at)}</span></div>
               {application.next_action && <div style={{ marginTop: 12, borderRadius: 10, padding: "10px 12px", backgroundColor: application.next_action.overdue ? "#fcebec" : "#f1f5f9", color: application.next_action.overdue ? "#991b1b" : "#475569", fontSize: 12 }}>
                 <strong>{application.next_action.overdue ? "Просрочено" : "Следующее действие"}:</strong> {application.next_action.title} · {dateLabel(application.next_action.due_at)} ({data.timezone})

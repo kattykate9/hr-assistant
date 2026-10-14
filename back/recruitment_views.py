@@ -1,3 +1,4 @@
+from candidate_ai import ai_summary
 from candidate_tasks import list_task_items, task_overview
 """Shared report data and paginated applications for the local HR workspace.
 No messages are sent. Reporting uses the configured local schedule and UTC queries.
@@ -208,8 +209,9 @@ def install_recruitment_views(app, connect_db):
             config = settings(connection)
             matches = application_matches(connection, rows)
             tasks = list_task_items(connection, rows)
+            ai = {row["id"]: ai_summary(connection, row["id"]) for row in rows}
         return {
-            "items": [{**row, "match": matches[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
+            "items": [{**row, "match": matches[row["id"]], "ai_match": ai[row["id"]], "next_action": tasks.get(row["id"])} for row in rows], "total": total, "page": page,
             "page_size": page_size, "pages": pages, "vacancy": vacancy,
             "sources": source_rows(counts), "timezone": config["report_timezone"],
             "query": q.strip(), "assessment": assessment, "sort": sort,

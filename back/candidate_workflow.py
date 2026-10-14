@@ -1,3 +1,4 @@
+from candidate_ai import read_ai, install_ai
 """Local recruiter workflow; decisions are made by the recruiter."""
 from candidate_assessments import read_assessment, install_assessments
 from candidate_tasks import read_task, install_tasks
@@ -51,7 +52,7 @@ def read_card(c, application_id):
     events = c.execute('SELECT * FROM application_events WHERE application_id=%s ORDER BY id DESC LIMIT 100', (application_id,)).fetchall()
     total = c.execute('SELECT COUNT(*) AS n FROM application_events WHERE application_id=%s', (application_id,)).fetchone()['n']
     return {'application': row, 'events': events,
-            'next_action': read_task(c, application_id), 'assessment': read_assessment(c, application_id), 'events_total': total, 'stage_history': stage_history(c, row), 'timezone': settings(c)['report_timezone'], 'stages': STAGES}
+            'next_action': read_task(c, application_id), 'assessment': read_assessment(c, application_id), 'ai_assessment': read_ai(c, application_id), 'events_total': total, 'stage_history': stage_history(c, row), 'timezone': settings(c)['report_timezone'], 'stages': STAGES}
 
 
 def require_action(value):
@@ -107,3 +108,4 @@ def install_candidate_workflow(app, connect_db):
     app.include_router(router)
     install_assessments(app, connect_db)
     install_tasks(app, connect_db)
+    install_ai(app, connect_db)
