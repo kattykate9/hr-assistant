@@ -51,8 +51,6 @@ services:
     image: ${HR_CI_REGISTRY_IMAGE}:${WEB_TAG}
     env_file:
       - ${DOTENV_FILE}
-    environment:
-      API_INTERNAL_URL: http://api:8000
     restart: unless-stopped
     command: ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]
     ports:
