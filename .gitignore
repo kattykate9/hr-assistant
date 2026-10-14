@@ -53,3 +53,6 @@ resumes/
 # Docker
 !.env.example
 data/
+
+# Backups from guarded login installer
+.auth-login-backups/

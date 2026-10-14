@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ async function saveJD(form: FormData) {
   let result = "network";
 
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       id ? `${API}/${encodeURIComponent(id)}` : API,
       {
         method: id ? "PUT" : "POST",
@@ -205,7 +206,7 @@ export default async function JDPage({
   let failed = false;
 
   try {
-    const response = await fetch(API, {
+    const response = await apiFetch(API, {
       headers: {
       },
       cache: "no-store",
